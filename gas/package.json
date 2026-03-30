@@ -1,0 +1,13 @@
+{
+  "name": "clinic-gas",
+  "scripts": {
+    "push":   "clasp push",
+    "pull":   "clasp pull",
+    "deploy": "clasp deploy --description \"$(date '+%Y-%m-%d %H:%M')\"",
+    "open":   "clasp open",
+    "logs":   "clasp logs --watch"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2"
+  }
+}

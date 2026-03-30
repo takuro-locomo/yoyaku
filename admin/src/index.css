@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/* ── Print styles ───────────────────────────────────────────────────────── */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 5mm;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    font-size: 8pt;
+  }
+
+  aside {
+    display: none !important;
+  }
+
+  main {
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
+  /* Grid table in print mode */
+  .schedule-grid-table {
+    font-size: 7pt !important;
+    width: 100% !important;
+    min-width: unset !important;
+  }
+
+  .schedule-grid-table td,
+  .schedule-grid-table th {
+    padding: 1px 2px !important;
+  }
+
+  /* Hide scroll container overflow restriction for print */
+  .schedule-scroll {
+    overflow: visible !important;
+  }
+}

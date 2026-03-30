@@ -1,0 +1,5 @@
+# clasp push 対象外のファイル
+.claspignore
+README.md
+*.md
+node_modules/
