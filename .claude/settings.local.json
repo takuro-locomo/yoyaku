@@ -4,7 +4,10 @@
       "Bash(npm install:*)",
       "Bash(npm run:*)",
       "Bash(curl -s http://localhost:5173)",
-      "Bash(npx:*)"
+      "Bash(npx:*)",
+      "Bash(xxd /c/dev/yoyaku/admin/.env)",
+      "Bash(iconv -f UTF-16LE -t UTF-8 /c/dev/yoyaku/admin/.env)",
+      "Bash(python3:*)"
     ]
   }
 }

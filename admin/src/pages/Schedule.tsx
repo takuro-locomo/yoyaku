@@ -16,11 +16,18 @@ export default function Schedule() {
   const [clickedMachine, setClickedMachine] = useState<string | undefined>();
   const [clickedSlot,    setClickedSlot]    = useState<string | undefined>();
 
+  const [error, setError] = useState<string | null>(null);
+
   // ── GAS API ──
   const { data: masters }            = useMasters();
   const { data: apiReservations = [] } = useScheduleReservations(date);
   const upsert = useUpsertScheduleReservation();
   const del    = useDeleteScheduleReservation();
+
+  const mutationOpts = {
+    onError: (err: Error) => setError(err.message),
+    onSuccess: () => setError(null),
+  };
 
   // API が取得できた場合はそちらを優先、未取得時はフォールバック
   const machineAreas = masters?.machineAreas ?? MACHINE_AREAS;
@@ -30,7 +37,8 @@ export default function Schedule() {
   const timeSlots = period === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
 
   const dayReservations = useMemo(
-    () => apiReservations.filter(r => r.date === date),
+    // GAS 側で Date オブジェクトが ISO 文字列になる場合も先頭 10 文字で比較
+    () => apiReservations.filter(r => (r.date ?? '').substring(0, 10) === date),
     [apiReservations, date],
   );
 
@@ -51,11 +59,13 @@ export default function Schedule() {
   };
 
   const handleSave = (data: Omit<ScheduleReservation, 'id'> & { id?: string }) => {
-    upsert.mutate({ ...data, date });
+    setError(null);
+    upsert.mutate({ ...data, date }, mutationOpts);
   };
 
   const handleDelete = (id: string) => {
-    del.mutate({ id, date });
+    setError(null);
+    del.mutate({ id, date }, mutationOpts);
   };
 
   const periodLabel = period === 'morning' ? '午前' : '午後';
@@ -116,6 +126,14 @@ export default function Schedule() {
           🖨️ 印刷
         </button>
       </div>
+
+      {/* ── Error banner ── */}
+      {error && (
+        <div className="bg-red-50 border-b border-red-200 px-5 py-2 flex items-center gap-2 text-sm text-red-700 print:hidden">
+          <span className="font-medium">保存エラー:</span> {error}
+          <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">×</button>
+        </div>
+      )}
 
       {/* ── Print header ── */}
       <div className="hidden print:block mb-3">

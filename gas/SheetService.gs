@@ -26,6 +26,11 @@ const SheetService = (() => {
   /**
    * シートの全データをオブジェクト配列に変換する。
    * ヘッダー行 (1行目) をキーとして使用する。
+   *
+   * Google Sheets は 'YYYY-MM-DD' 形式の文字列を自動でシリアル日付に変換する。
+   * getValues() で読み戻すと Date オブジェクトになるため、文字列に正規化する。
+   *   - 時刻成分がない (深夜 0 時ちょうど) → 'YYYY-MM-DD'
+   *   - 時刻成分あり → ISO8601 文字列
    */
   function _toObjects(sheet) {
     const lastRow = sheet.getLastRow();
@@ -34,12 +39,22 @@ const SheetService = (() => {
 
     const data = sheet.getRange(1, 1, lastRow, lastCol).getValues();
     const headers = data[0];
+    const tz = Session.getScriptTimeZone();
 
     return data.slice(1).map(row => {
       const obj = {};
       headers.forEach((h, i) => {
-        // 空文字 or 空白のヘッダーはスキップ
-        if (h !== '') obj[h] = row[i] === '' ? '' : row[i];
+        if (h === '') return;
+        let val = row[i];
+        if (val === '') {
+          val = '';
+        } else if (val instanceof Date) {
+          const hasTime = val.getHours() !== 0 || val.getMinutes() !== 0 || val.getSeconds() !== 0;
+          val = hasTime
+            ? Utilities.formatDate(val, tz, "yyyy-MM-dd'T'HH:mm:ssXXX")
+            : Utilities.formatDate(val, tz, 'yyyy-MM-dd');
+        }
+        obj[h] = val;
       });
       return obj;
     });

@@ -24,7 +24,7 @@ export async function gasGet<T>(
   if (params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   }
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { cache: 'no-store' });
   const json = await res.json();
   if (!json.success) throw new GasError(json.error ?? 'GAS error');
   return json.data as T;
