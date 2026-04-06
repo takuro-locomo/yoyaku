@@ -109,27 +109,34 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
                   const reservation = reservationMap.get(key);
 
                   if (reservation) {
+                    const isPending = reservation.status === 'pending';
                     const treatment = getTreatment(reservation.treatmentId);
                     const staff     = getStaff(reservation.staffId);
                     const maxSpan   = timeSlots.length - slotIdx;
                     const rowSpan   = Math.min(reservation.durationSlots, maxSpan);
+                    const bgColor   = isPending ? '#fed7aa' : (treatment?.color ?? '#f9fafb');
 
                     return (
                       <td
                         key={machine.id}
                         rowSpan={rowSpan}
-                        className={`border border-slate-300 px-1 py-0.5 cursor-pointer hover:brightness-95 transition-all align-top overflow-hidden ${
-                          isHour ? 'border-t-slate-400' : ''
-                        }`}
-                        style={{ backgroundColor: treatment?.color ?? '#f9fafb', verticalAlign: 'top' }}
+                        className={`border px-1 py-0.5 cursor-pointer hover:brightness-95 transition-all align-top overflow-hidden ${
+                          isPending ? 'border-orange-300' : 'border-slate-300'
+                        } ${isHour ? (isPending ? 'border-t-orange-400' : 'border-t-slate-400') : ''}`}
+                        style={{ backgroundColor: bgColor, verticalAlign: 'top' }}
                         onClick={() => onReservationClick(reservation)}
                       >
                         <div className="leading-tight overflow-hidden">
-                          <div className="font-semibold text-slate-800 text-[11px] truncate leading-tight">
-                            {reservation.patientName}
+                          <div className="flex items-center gap-0.5">
+                            {isPending && (
+                              <span className="shrink-0 text-[8px] font-bold bg-orange-500 text-white px-1 rounded-sm leading-tight">仮</span>
+                            )}
+                            <div className="font-semibold text-slate-800 text-[11px] truncate leading-tight">
+                              {reservation.patientName}
+                            </div>
                           </div>
                           <div className="text-slate-500 text-[9px] truncate">
-                            {treatment?.shortName ?? ''}
+                            {treatment?.shortName ?? (isPending ? '未確定' : '')}
                           </div>
                           {staff && (
                             <span

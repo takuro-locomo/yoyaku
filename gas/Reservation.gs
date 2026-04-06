@@ -24,6 +24,32 @@ const Reservation = (() => {
   }
 
   /**
+   * "HH:MM" または SheetService が返す ISO8601 形式 ("1899-12-30T09:30:00+09:00") を
+   * 0時からの経過分に変換する。
+   */
+  function _slotToMinutes(timeSlot) {
+    var str = String(timeSlot);
+    if (str.indexOf('T') !== -1) {
+      // ISO8601 の場合は "T" 以降の HH:MM 部分を取り出す
+      str = str.split('T')[1].slice(0, 5);
+    }
+    var parts = str.split(':');
+    return Number(parts[0]) * 60 + Number(parts[1]);
+  }
+
+  /**
+   * 2つのスケジュール予約スロットが時間的に重複するか判定する。
+   * 1スロット = 15分。端点一致（隣接）は重複しない。
+   */
+  function _scheduleSlotOverlaps(aSlot, aDur, bSlot, bDur) {
+    var aStart = _slotToMinutes(aSlot);
+    var aEnd   = aStart + Number(aDur) * 15;
+    var bStart = _slotToMinutes(bSlot);
+    var bEnd   = bStart + Number(bDur) * 15;
+    return aStart < bEnd && aEnd > bStart;
+  }
+
+  /**
    * 2つの時間帯が重複するかチェックする。
    * 端点が一致する場合 (隣接) は重複しないものとする。
    *   A overlaps B:  A.start < B.end  &&  A.end > B.start
@@ -305,6 +331,16 @@ const Reservation = (() => {
     return `${date}T${h}:${m}:00${TIMEZONE_OFFSET}`;
   }
 
+  /**
+   * 指定患者の予約一覧を返す (全ステータス含む、新しい順)。
+   * @param {string} patientId
+   */
+  function getByPatientId(patientId) {
+    if (!patientId) throw new Error('patientId は必須です');
+    const rows = SheetService.findWhere(SHEET, r => r.patientId === patientId);
+    return rows.sort((a, b) => new Date(b.startAt) - new Date(a.startAt));
+  }
+
   // ---------------------------------------------------------------------------
   // 予約表専用 CRUD (scheduleReservations シート)
   // ---------------------------------------------------------------------------
@@ -318,17 +354,58 @@ const Reservation = (() => {
   function getScheduleReservations(date) {
     if (!date) throw new Error('date (YYYY-MM-DD) は必須です');
     return SheetService.findWhere(SCHEDULE_SHEET, function(r) {
-      return r.date === date;
+      // SheetService が日付を ISO8601 で返す場合も先頭10文字で比較
+      return String(r.date).substring(0, 10) === date;
+    }).map(function(r) {
+      // timeSlot が "1899-12-30T09:00:00+09:00" 形式の場合は "HH:MM" に正規化する
+      var ts = String(r.timeSlot);
+      if (ts.indexOf('T') !== -1) {
+        ts = ts.split('T')[1].slice(0, 5);
+      }
+      return Object.assign({}, r, {
+        date:     String(r.date).substring(0, 10),
+        timeSlot: ts,
+      });
+    });
+  }
+
+  /**
+   * 予約表の競合チェック: 同日・同機械で時間帯が重複する予約を返す。
+   * @param {string} date
+   * @param {string} machineId
+   * @param {string} timeSlot
+   * @param {number} durationSlots
+   * @param {string} excludeId - 更新時に自身を除外する予約ID (空文字可)
+   * @returns {object[]}
+   */
+  function _checkScheduleConflicts(date, machineId, timeSlot, durationSlots, excludeId) {
+    return SheetService.findWhere(SCHEDULE_SHEET, function(r) {
+      // SheetService が日付を "2026-03-30T00:00:00+09:00" 形式で返す場合も先頭10文字で比較
+      return String(r.date).substring(0, 10) === date
+        && r.machineId === machineId
+        && r.id !== excludeId
+        && _scheduleSlotOverlaps(timeSlot, durationSlots, r.timeSlot, Number(r.durationSlots));
     });
   }
 
   /**
    * 予約表の予約を作成または更新する。
    * id がある場合は更新、ない場合は新規作成。
+   * 同日・同機械の時間帯重複は LockService で排他制御しつつ弾く。
    */
   function upsertScheduleReservation(data) {
     if (data.id) {
-      SheetService.updateById(SCHEDULE_SHEET, data.id, {
+      // 更新: 自身を除いた競合チェック
+      var updateConflicts = _checkScheduleConflicts(
+        data.date, data.machineId, data.timeSlot, Number(data.durationSlots), data.id
+      );
+      if (updateConflicts.length > 0) {
+        throw new Error(
+          'この機械・時間帯にはすでに予約が入っています (予約ID: ' +
+          updateConflicts.map(function(r) { return r.id; }).join(', ') + ')'
+        );
+      }
+      var updateFields = {
         machineId:     data.machineId,
         timeSlot:      data.timeSlot,
         durationSlots: Number(data.durationSlots),
@@ -337,13 +414,28 @@ const Reservation = (() => {
         staffId:       data.staffId || '',
         note:          data.note || '',
         updatedAt:     _now(),
-      });
+      };
+      // status が明示されている場合のみ上書き (省略時は既存値を保持)
+      if (data.status) updateFields.status = data.status;
+      SheetService.updateById(SCHEDULE_SHEET, data.id, updateFields);
       return SheetService.findById(SCHEDULE_SHEET, data.id);
     }
 
     const lock = LockService.getScriptLock();
     try {
       lock.waitLock(10000);
+
+      // 新規作成: ロック取得後に競合チェック (同時リクエストによる二重登録を防ぐ)
+      var createConflicts = _checkScheduleConflicts(
+        data.date, data.machineId, data.timeSlot, Number(data.durationSlots), ''
+      );
+      if (createConflicts.length > 0) {
+        throw new Error(
+          'この機械・時間帯にはすでに予約が入っています (予約ID: ' +
+          createConflicts.map(function(r) { return r.id; }).join(', ') + ')'
+        );
+      }
+
       const record = {
         id:            SheetService.generateId(),
         date:          data.date,
@@ -354,6 +446,8 @@ const Reservation = (() => {
         treatmentId:   data.treatmentId || '',
         staffId:       data.staffId || '',
         note:          data.note || '',
+        // スタッフが直接作成する場合は confirmed、患者予約からの自動作成は pending
+        status:        data.status || 'confirmed',
         createdAt:     _now(),
         updatedAt:     _now(),
       };
@@ -376,7 +470,7 @@ const Reservation = (() => {
   }
 
   return {
-    create, update, cancel, getById, getByDate, getAvailableSlots, checkConflicts,
+    create, update, cancel, getById, getByDate, getByPatientId, getAvailableSlots, checkConflicts,
     getScheduleReservations, upsertScheduleReservation, deleteScheduleReservation,
   };
 })();

@@ -11,12 +11,15 @@ const STAFF_COLORS: Record<string, string> = {
 
 type Period = 'morning' | 'afternoon';
 
-function fmtSlot(timeSlot: string, durationSlots: number): string {
-  const [h, m] = timeSlot.split(':').map(Number);
-  const endMin  = h * 60 + m + durationSlots * 15;
+function fmtSlot(date: string, timeSlot: string, durationSlots: number): string {
+  // GASがSheetsの時刻をISO8601で返す場合 ("1899-12-30T09:30:00+09:00") に対応
+  const startTime = timeSlot.includes('T') ? timeSlot.split('T')[1].slice(0, 5) : timeSlot;
+  const [h, m] = startTime.split(':').map(Number);
+  const endMin = h * 60 + m + durationSlots * 15;
   const eh = Math.floor(endMin / 60);
   const em = endMin % 60;
-  return `${timeSlot} – ${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}`;
+  const endTime = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+  return `${date.replace(/-/g, '/')} ${startTime} – ${endTime}`;
 }
 
 export default function Reservations() {
@@ -163,7 +166,7 @@ export default function Reservations() {
                 return (
                   <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap font-mono text-xs">
-                      {fmtSlot(r.timeSlot, r.durationSlots)}
+                      {fmtSlot(r.date, r.timeSlot, r.durationSlots)}
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-800">{r.patientName}</td>
                     <td className="px-4 py-3">

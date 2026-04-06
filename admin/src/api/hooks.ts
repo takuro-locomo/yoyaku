@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { gasGet, gasPost } from './gasClient';
-import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Staff, Service } from '../types';
+import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Staff, Service, Patient, Reservation } from '../types';
 
 // ---------------------------------------------------------------------------
 // 型定義
@@ -34,7 +34,16 @@ export function useMasters() {
 export function useScheduleReservations(date: string) {
   return useQuery<ScheduleReservation[]>({
     queryKey: ['scheduleReservations', date],
-    queryFn:  () => gasGet<ScheduleReservation[]>('getScheduleReservations', { date }),
+    queryFn:  async () => {
+      const data = await gasGet<ScheduleReservation[]>('getScheduleReservations', { date });
+      // SheetService が時刻を "1899-12-30T09:00:00+09:00"、日付を "2026-03-30T00:00:00+09:00" で
+      // 返す場合があるため、それぞれ "HH:MM" / "YYYY-MM-DD" に正規化する
+      return data.map(r => ({
+        ...r,
+        date:     r.date.substring(0, 10),
+        timeSlot: r.timeSlot.includes('T') ? r.timeSlot.split('T')[1].slice(0, 5) : r.timeSlot,
+      }));
+    },
     staleTime: 30 * 1000, // 30秒キャッシュ
     retry: 1,
   });
@@ -110,5 +119,37 @@ export function useUpsertService() {
     mutationFn: (data: Record<string, unknown>) =>
       gasPost<Service>('upsertService', data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['masters'] }); },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 患者 (patients)
+// ---------------------------------------------------------------------------
+
+export function usePatients() {
+  return useQuery<Patient[]>({
+    queryKey: ['patients'],
+    queryFn:  () => gasGet<Patient[]>('getPatients'),
+    staleTime: 60 * 1000, // 1分キャッシュ
+    retry: 1,
+  });
+}
+
+export function usePatientReservations(patientId: string | null) {
+  return useQuery<Reservation[]>({
+    queryKey: ['patientReservations', patientId],
+    queryFn:  () => gasGet<Reservation[]>('getPatientReservations', { patientId: patientId! }),
+    enabled: !!patientId,
+    staleTime: 30 * 1000,
+    retry: 1,
+  });
+}
+
+export function useUpsertPatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      gasPost<Patient>('upsertPatient', data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['patients'] }); },
   });
 }

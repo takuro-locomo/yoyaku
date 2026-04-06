@@ -30,7 +30,7 @@ function resetAndSetup() {
   const ss = SpreadsheetApp.openById(
     PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID')
   );
-  const MANAGED = ['reservations','rooms','equipment','staff','services','patients','scheduleReservations'];
+  const MANAGED = ['reservations','rooms','equipment','staff','services','patients','scheduleReservations','patientReservations'];
   MANAGED.forEach(name => {
     const sheet = ss.getSheetByName(name);
     if (sheet) ss.deleteSheet(sheet);
@@ -58,9 +58,10 @@ function initSpreadsheet() {
     },
     {
       // 予約表グリッド専用シート (machineId = roomId)
+      // status: 'confirmed' (スタッフ作成) | 'pending' (患者予約から自動作成)
       name: 'scheduleReservations',
       headers: ['id','date','machineId','timeSlot','durationSlots',
-                'patientName','treatmentId','staffId','note','createdAt','updatedAt'],
+                'patientName','treatmentId','staffId','note','status','createdAt','updatedAt'],
     },
     {
       // area / areaColor を追加
@@ -83,7 +84,12 @@ function initSpreadsheet() {
     },
     {
       name: 'patients',
-      headers: ['id','lineUserId','name','phone','email','createdAt','updatedAt'],
+      headers: ['id','lineUserId','name','phone','email','birthDate','createdAt','updatedAt'],
+    },
+    {
+      name: 'patientReservations',
+      headers: ['id','menuId','menuName','durationMin','patientName','phone','lineUserId',
+                'date','startTime','status','confirmationNo','note','createdAt'],
     },
   ];
 

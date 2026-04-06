@@ -62,12 +62,25 @@ function _route(action, params) {
     case 'getAvailableSlots':
       return _buildResponse({ success: true, data: Reservation.getAvailableSlots(params.date, params.serviceId) });
 
-    // --- 患者 ---
+    // --- 患者 (管理画面用) ---
     case 'upsertPatient':
       return _buildResponse({ success: true, data: Resource.upsertPatient(params) });
 
     case 'getPatients':
       return _buildResponse({ success: true, data: Resource.getPatients() });
+
+    // --- 患者向け予約 (Web / LINE) ---
+    case 'getPatientMenus':
+      return _buildResponse({ success: true, data: PatientBooking.getMenus() });
+
+    case 'getPatientSlots':
+      return _buildResponse({ success: true, data: PatientBooking.getAvailableSlots(params.menuId, params.date) });
+
+    case 'createPatientReservation':
+      return _buildResponse({ success: true, data: PatientBooking.createReservation(params) });
+
+    case 'getPatientReservations':
+      return _buildResponse({ success: true, data: Reservation.getByPatientId(params.patientId) });
 
     // --- マスタ一括取得 (管理画面用) ---
     case 'getMasters':

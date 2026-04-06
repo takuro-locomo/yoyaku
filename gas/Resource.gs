@@ -164,24 +164,52 @@ const Resource = (() => {
   }
 
   /**
-   * LINE userId をキーとして患者を作成または更新する。
+   * 患者を作成または更新する。
+   *
+   * 優先度:
+   *   1. data.id がある場合 → ID で既存患者を更新 (管理画面での編集)
+   *   2. data.lineUserId がある場合 → LINE userId をキーとして upsert (LINE経由)
+   *   3. どちらもない場合 → 新規作成 (管理画面での手動登録)
    */
   function upsertPatient(data) {
-    if (!data.lineUserId) throw new Error('lineUserId は必須です');
-
-    const existing = getPatientByLineUserId(data.lineUserId);
-    if (existing) {
-      const updates = { ...data, updatedAt: _now() };
-      SheetService.updateById('patients', existing.id, updates);
-      return { ...existing, ...updates };
+    // (1) ID指定の更新
+    if (data.id) {
+      const updates = {
+        name:      data.name      || '',
+        phone:     data.phone     || '',
+        email:     data.email     || '',
+        birthDate: data.birthDate || '',
+        updatedAt: _now(),
+      };
+      if (data.lineUserId !== undefined) updates.lineUserId = data.lineUserId;
+      SheetService.updateById('patients', data.id, updates);
+      return SheetService.findById('patients', data.id);
     }
 
+    // (2) LINE userId をキーとした upsert
+    if (data.lineUserId) {
+      const existing = getPatientByLineUserId(data.lineUserId);
+      if (existing) {
+        const updates = {
+          name:      data.name      || existing.name,
+          phone:     data.phone     || existing.phone,
+          email:     data.email     || existing.email,
+          birthDate: data.birthDate || existing.birthDate || '',
+          updatedAt: _now(),
+        };
+        SheetService.updateById('patients', existing.id, updates);
+        return { ...existing, ...updates };
+      }
+    }
+
+    // (3) 新規作成
     const record = {
-      id: SheetService.generateId(),
-      lineUserId: data.lineUserId,
-      name: data.name || '',
-      phone: data.phone || '',
-      email: data.email || '',
+      id:        SheetService.generateId(),
+      lineUserId: data.lineUserId || '',
+      name:      data.name      || '',
+      phone:     data.phone     || '',
+      email:     data.email     || '',
+      birthDate: data.birthDate || '',
       createdAt: _now(),
       updatedAt: _now(),
     };

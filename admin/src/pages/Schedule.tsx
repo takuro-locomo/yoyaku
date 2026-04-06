@@ -3,6 +3,7 @@ import type { ScheduleReservation } from '../types';
 import { MORNING_SLOTS, AFTERNOON_SLOTS, MACHINE_AREAS, mockScheduleStaff } from '../mock/scheduleData';
 import ScheduleGrid from '../components/ScheduleGrid';
 import ReservationModal from '../components/ReservationModal';
+import ConfirmPendingModal from '../components/ConfirmPendingModal';
 import { useMasters, useScheduleReservations, useUpsertScheduleReservation, useDeleteScheduleReservation } from '../api/hooks';
 
 type Period = 'morning' | 'afternoon';
@@ -15,6 +16,9 @@ export default function Schedule() {
   const [editingR,       setEditingR]       = useState<ScheduleReservation | undefined>();
   const [clickedMachine, setClickedMachine] = useState<string | undefined>();
   const [clickedSlot,    setClickedSlot]    = useState<string | undefined>();
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingR,    setPendingR]    = useState<ScheduleReservation | undefined>();
 
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +56,11 @@ export default function Schedule() {
   };
 
   const openEdit = (r: ScheduleReservation) => {
+    if (r.status === 'pending') {
+      setPendingR(r);
+      setConfirmOpen(true);
+      return;
+    }
     setEditingR(r);
     setClickedMachine(r.machineId);
     setClickedSlot(r.timeSlot);
@@ -175,6 +184,17 @@ export default function Schedule() {
         machines={allMachines}
         staff={scheduleStaff}
       />
+
+      {pendingR && (
+        <ConfirmPendingModal
+          open={confirmOpen}
+          onClose={() => setConfirmOpen(false)}
+          reservation={pendingR}
+          date={date}
+          machines={allMachines}
+          staff={scheduleStaff}
+        />
+      )}
     </div>
   );
 }
