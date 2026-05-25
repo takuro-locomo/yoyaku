@@ -27,7 +27,7 @@ export default function Resources() {
   const [tab,           setTab]           = useState<Tab>('rooms');
   const [selectedStaff, setSelectedStaff] = useState<Set<string>>(new Set());
 
-  const { data: masters, isLoading } = useMasters();
+  const { data: masters } = useMasters();
 
   // API優先・フォールバックはモック（APIエラー/未デプロイ時もデータ表示）
   const rooms     = masters?.rooms      ?? mockRooms;
