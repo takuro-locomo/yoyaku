@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { mockRooms, mockEquipment, mockStaff, mockServices } from '../mock/data';
-import { useMasters, useUpsertRoom, useUpsertEquipment, useUpsertStaff, useUpsertService } from '../api/hooks';
-import type { Room, Equipment, Staff, Service, ScheduleStaff } from '../types';
-import ResourceModal from '../components/ResourceModal';
+import { useMasters } from '../api/hooks';
+import type { ScheduleStaff } from '../types';
 
+// mockStaff → ScheduleStaff 形式に変換したフォールバック
 const FALLBACK_STAFF: ScheduleStaff[] = mockStaff.map(s => ({
   id: s.id, name: s.name, color: s.color ?? '#bfdbfe',
 }));
@@ -11,10 +11,10 @@ const FALLBACK_STAFF: ScheduleStaff[] = mockStaff.map(s => ({
 type Tab = 'rooms' | 'equipment' | 'staff' | 'services';
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'rooms',     label: '部屋' },
-  { id: 'equipment', label: '機械' },
-  { id: 'staff',     label: 'スタッフ' },
-  { id: 'services',  label: 'サービス' },
+  { id: 'rooms',     label: '🏠 部屋' },
+  { id: 'equipment', label: '🔧 機械' },
+  { id: 'staff',     label: '👩‍⚕️ スタッフ' },
+  { id: 'services',  label: '💆 サービス' },
 ];
 
 function Badge({ active }: { active: boolean }) {
@@ -27,22 +27,9 @@ export default function Resources() {
   const [tab,           setTab]           = useState<Tab>('rooms');
   const [selectedStaff, setSelectedStaff] = useState<Set<string>>(new Set());
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingData, setEditingData] = useState<Record<string, unknown> | null>(null);
+  const { data: masters, isLoading } = useMasters();
 
-  const { data: masters } = useMasters();
-
-  const [error, setError] = useState<string | null>(null);
-
-  const mutationOpts = {
-    onError: (err: Error) => { setError(err.message); },
-    onSuccess: () => { setError(null); },
-  };
-  const upsertRoom      = useUpsertRoom();
-  const upsertEquipment = useUpsertEquipment();
-  const upsertStaff     = useUpsertStaff();
-  const upsertService   = useUpsertService();
-
+  // API優先・フォールバックはモック（APIエラー/未デプロイ時もデータ表示）
   const rooms     = masters?.rooms      ?? mockRooms;
   const equipment = masters?.equipment  ?? mockEquipment;
   const staff     = masters?.staff      ?? FALLBACK_STAFF;
@@ -60,39 +47,9 @@ export default function Resources() {
     ? staff
     : staff.filter(s => selectedStaff.has(s.id));
 
-  const openNew = () => {
-    setEditingData(null);
-    setModalOpen(true);
-  };
-
-  const openEdit = (record: Record<string, unknown>) => {
-    setEditingData(record);
-    setModalOpen(true);
-  };
-
-  const handleSave = (data: Record<string, unknown>) => {
-    setError(null);
-    switch (tab) {
-      case 'rooms':      upsertRoom.mutate(data, mutationOpts);      break;
-      case 'equipment':  upsertEquipment.mutate(data, mutationOpts);  break;
-      case 'staff':      upsertStaff.mutate(data, mutationOpts);      break;
-      case 'services':   upsertService.mutate(data, mutationOpts);    break;
-    }
-  };
-
-  const handleDelete = (id: string) => {
-    setError(null);
-    switch (tab) {
-      case 'rooms':      upsertRoom.mutate({ id, isActive: false }, mutationOpts);      break;
-      case 'equipment':  upsertEquipment.mutate({ id, isActive: false }, mutationOpts);  break;
-      case 'staff':      upsertStaff.mutate({ id, isActive: false }, mutationOpts);      break;
-      case 'services':   upsertService.mutate({ id, isActive: false }, mutationOpts);    break;
-    }
-  };
-
   return (
     <div className="flex flex-col h-full">
-      {/* Toolbar */}
+      {/* ── Screen toolbar ── */}
       <div className="print:hidden flex items-center gap-3 px-5 py-3 border-b border-slate-100 bg-white shrink-0 flex-wrap">
         <h1 className="text-xl font-bold text-slate-800 mr-2">マスタ管理</h1>
 
@@ -118,38 +75,27 @@ export default function Resources() {
           onClick={() => window.print()}
           className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
-          印刷
+          🖨️ 印刷
         </button>
       </div>
 
-      {/* Error banner */}
-      {error && (
-        <div className="bg-red-50 border-b border-red-200 px-5 py-2 flex items-center gap-2 text-sm text-red-700 print:hidden">
-          <span className="font-medium">保存エラー:</span> {error}
-          <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">×</button>
-        </div>
-      )}
-
-      {/* Print header */}
+      {/* ── Print header ── */}
       <div className="hidden print:block mb-3">
         <div className="flex items-center justify-between border-b-2 border-slate-800 pb-2">
           <h1 className="text-base font-bold">マスタ管理 — {TABS.find(t => t.id === tab)?.label}</h1>
         </div>
       </div>
 
-      {/* Content */}
+      {/* ── Content ── */}
       <div className="flex-1 overflow-auto p-4 print:p-0">
         <div className="print:hidden flex justify-end mb-4">
-          <button
-            onClick={openNew}
-            className="flex items-center gap-2 bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
-          >
-            <span>+</span> 新規追加
+          <button className="flex items-center gap-2 bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors font-medium">
+            <span>＋</span> 新規追加
           </button>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-          {/* Tabs */}
+          {/* タブ */}
           <div className="flex border-b border-slate-100 print:hidden">
             {TABS.map(t => (
               <button
@@ -167,7 +113,7 @@ export default function Resources() {
           </div>
 
           <div>
-            {/* Rooms */}
+            {/* 部屋 (= 予約表の列) */}
             {tab === 'rooms' && (
               <table className="w-full text-sm">
                 <thead>
@@ -178,7 +124,7 @@ export default function Resources() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rooms.map((r: Room) => (
+                  {rooms.map(r => (
                     <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 font-medium text-slate-800">{r.name}</td>
                       <td className="px-4 py-3">
@@ -196,7 +142,7 @@ export default function Resources() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button onClick={() => openEdit(r as unknown as Record<string, unknown>)} className="text-xs text-indigo-600 hover:underline">編集</button>
+                        <button className="text-xs text-indigo-600 hover:underline">編集</button>
                       </td>
                     </tr>
                   ))}
@@ -207,7 +153,7 @@ export default function Resources() {
               </table>
             )}
 
-            {/* Equipment */}
+            {/* 機械 */}
             {tab === 'equipment' && (
               <table className="w-full text-sm">
                 <thead>
@@ -218,7 +164,7 @@ export default function Resources() {
                   </tr>
                 </thead>
                 <tbody>
-                  {equipment.map((eq: Equipment) => (
+                  {equipment.map(eq => (
                     <tr key={eq.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 font-medium text-slate-800">{eq.name}</td>
                       <td className="px-4 py-3 text-slate-500">{eq.description}</td>
@@ -229,18 +175,15 @@ export default function Resources() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button onClick={() => openEdit(eq as unknown as Record<string, unknown>)} className="text-xs text-indigo-600 hover:underline">編集</button>
+                        <button className="text-xs text-indigo-600 hover:underline">編集</button>
                       </td>
                     </tr>
                   ))}
-                  {equipment.length === 0 && (
-                    <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400 text-sm">データがありません</td></tr>
-                  )}
                 </tbody>
               </table>
             )}
 
-            {/* Staff */}
+            {/* スタッフ */}
             {tab === 'staff' && (
               <table className="w-full text-sm">
                 <thead>
@@ -262,7 +205,7 @@ export default function Resources() {
                           {s.name}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-500">{'email' in s ? (s as Staff).email : '—'}</td>
+                      <td className="px-4 py-3 text-slate-500">—</td>
                       <td className="px-4 py-3">
                         <span className="flex items-center gap-1.5 text-xs">
                           <Badge active={true} />
@@ -270,7 +213,7 @@ export default function Resources() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button onClick={() => openEdit(s as unknown as Record<string, unknown>)} className="text-xs text-indigo-600 hover:underline">編集</button>
+                        <button className="text-xs text-indigo-600 hover:underline">編集</button>
                       </td>
                     </tr>
                   ))}
@@ -281,7 +224,7 @@ export default function Resources() {
               </table>
             )}
 
-            {/* Services */}
+            {/* サービス */}
             {tab === 'services' && (
               <table className="w-full text-sm">
                 <thead>
@@ -292,11 +235,11 @@ export default function Resources() {
                   </tr>
                 </thead>
                 <tbody>
-                  {services.map((sv: Service) => (
+                  {services.map(sv => (
                     <tr key={sv.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 font-medium text-slate-800">{sv.name}</td>
                       <td className="px-4 py-3 text-slate-600">{sv.durationMinutes} 分</td>
-                      <td className="px-4 py-3 text-slate-600">{Number(sv.price).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-slate-600">¥{Number(sv.price).toLocaleString()}</td>
                       <td className="px-4 py-3">
                         <span className="flex items-center gap-1.5 text-xs">
                           <Badge active={sv.isActive} />
@@ -304,7 +247,7 @@ export default function Resources() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button onClick={() => openEdit(sv as unknown as Record<string, unknown>)} className="text-xs text-indigo-600 hover:underline">編集</button>
+                        <button className="text-xs text-indigo-600 hover:underline">編集</button>
                       </td>
                     </tr>
                   ))}
@@ -317,15 +260,6 @@ export default function Resources() {
           </div>
         </div>
       </div>
-
-      <ResourceModal
-        open={modalOpen}
-        tab={tab}
-        data={editingData}
-        onClose={() => setModalOpen(false)}
-        onSave={handleSave}
-        onDelete={handleDelete}
-      />
     </div>
   );
 }

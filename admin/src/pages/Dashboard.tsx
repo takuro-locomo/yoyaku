@@ -3,7 +3,6 @@ import type { ScheduleReservation } from '../types';
 import { MORNING_SLOTS, AFTERNOON_SLOTS, MACHINE_AREAS, mockScheduleStaff } from '../mock/scheduleData';
 import ScheduleGrid from '../components/ScheduleGrid';
 import ReservationModal from '../components/ReservationModal';
-import ConfirmPendingModal from '../components/ConfirmPendingModal';
 import { useMasters, useScheduleReservations, useUpsertScheduleReservation, useDeleteScheduleReservation } from '../api/hooks';
 
 type Period = 'morning' | 'afternoon';
@@ -18,21 +17,11 @@ export default function Dashboard() {
   const [clickedMachine, setClickedMachine] = useState<string | undefined>();
   const [clickedSlot,    setClickedSlot]    = useState<string | undefined>();
 
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pendingR,    setPendingR]    = useState<ScheduleReservation | undefined>();
-
-  const [error, setError] = useState<string | null>(null);
-
   // ── GAS API ──
   const { data: masters }              = useMasters();
   const { data: apiReservations = [] } = useScheduleReservations(date);
   const upsert = useUpsertScheduleReservation();
   const del    = useDeleteScheduleReservation();
-
-  const mutationOpts = {
-    onError: (err: Error) => setError(err.message),
-    onSuccess: () => setError(null),
-  };
 
   const machineAreas  = masters?.machineAreas ?? MACHINE_AREAS;
   const scheduleStaff = masters?.staff        ?? mockScheduleStaff;
@@ -41,7 +30,7 @@ export default function Dashboard() {
   const timeSlots = period === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
 
   const dayReservations = useMemo(
-    () => apiReservations.filter(r => (r.date ?? '').substring(0, 10) === date),
+    () => apiReservations.filter(r => r.date === date),
     [apiReservations, date],
   );
 
@@ -68,11 +57,6 @@ export default function Dashboard() {
   };
 
   const openEdit = (r: ScheduleReservation) => {
-    if (r.status === 'pending') {
-      setPendingR(r);
-      setConfirmOpen(true);
-      return;
-    }
     setEditingR(r);
     setClickedMachine(r.machineId);
     setClickedSlot(r.timeSlot);
@@ -80,13 +64,11 @@ export default function Dashboard() {
   };
 
   const handleSave = (data: Omit<ScheduleReservation, 'id'> & { id?: string }) => {
-    setError(null);
-    upsert.mutate({ ...data, date }, mutationOpts);
+    upsert.mutate({ ...data, date });
   };
 
   const handleDelete = (id: string) => {
-    setError(null);
-    del.mutate({ id, date }, mutationOpts);
+    del.mutate({ id, date });
   };
 
   const amCount = dayReservations.filter(r => MORNING_SLOTS.includes(r.timeSlot)).length;
@@ -156,14 +138,6 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* ── Error banner ── */}
-      {error && (
-        <div className="bg-red-50 border-b border-red-200 px-5 py-2 flex items-center gap-2 text-sm text-red-700 print:hidden">
-          <span className="font-medium">保存エラー:</span> {error}
-          <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">×</button>
-        </div>
-      )}
-
       {/* ── Print header ── */}
       <div className="hidden print:block mb-3">
         <div className="flex items-center justify-between border-b-2 border-slate-800 pb-2 mb-1">
@@ -204,17 +178,6 @@ export default function Dashboard() {
         machines={allMachines}
         staff={scheduleStaff}
       />
-
-      {pendingR && (
-        <ConfirmPendingModal
-          open={confirmOpen}
-          onClose={() => setConfirmOpen(false)}
-          reservation={pendingR}
-          date={date}
-          machines={allMachines}
-          staff={scheduleStaff}
-        />
-      )}
     </div>
   );
 }

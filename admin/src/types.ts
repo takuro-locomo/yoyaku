@@ -56,8 +56,6 @@ export interface Patient {
   name: string;
   phone: string;
   email: string;
-  birthDate?: string; // YYYY-MM-DD
-  createdAt?: string; // ISO8601
 }
 
 // ── Schedule types ────────────────────────────────────────────────────────
@@ -98,5 +96,4 @@ export interface ScheduleReservation {
   treatmentId: string;
   staffId: string;
   note: string;
-  status?: string;     // 'confirmed' (default) | 'pending' (患者予約から自動作成)
 }
