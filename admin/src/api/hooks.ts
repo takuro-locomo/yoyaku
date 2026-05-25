@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { gasGet, gasPost } from './gasClient';
-import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Staff, Service, Patient, Reservation } from '../types';
+import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Service, Patient, Reservation } from '../types';
 
 // ---------------------------------------------------------------------------
 // 型定義
