@@ -6,7 +6,8 @@
  * POST は Content-Type: text/plain で送信し、GAS 側で JSON.parse する。
  */
 
-const BASE = import.meta.env.VITE_GAS_URL as string;
+const BASE = import.meta.env.VITE_GAS_URL as string
+  || 'https://script.google.com/macros/s/AKfycbzx3Sn-Fmx_PVJHzYARUqyUYOkMNtZf9bimKws4INl-H_0II3BoB1gi7z3xYZHLHoWU/exec';
 
 export class GasError extends Error {
   constructor(message: string) {
