@@ -9,8 +9,7 @@ import { useMasters, useScheduleReservations, useUpsertScheduleReservation, useD
 type Period = 'morning' | 'afternoon';
 
 export default function Schedule() {
-  const urlDate = new URLSearchParams(window.location.search).get('date');
-  const [date, setDate]     = useState(urlDate || new Date().toLocaleDateString('sv'));
+  const [date, setDate]     = useState('2026-03-30');
   const [period, setPeriod] = useState<Period>('morning');
 
   const [modalOpen,      setModalOpen]      = useState(false);
@@ -107,7 +106,7 @@ export default function Schedule() {
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              {p === 'morning' ? '午前 (9:00〜12:45)' : '午後 (13:00〜19:45)'}
+              {p === 'morning' ? '午前 (9:00〜12:45)' : '午後 (13:00〜18:45)'}
             </button>
           ))}
         </div>

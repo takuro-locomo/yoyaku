@@ -77,7 +77,7 @@ function generateSlots(startH: number, startM: number, endH: number, endM: numbe
 }
 
 export const MORNING_SLOTS   = generateSlots(9,  0, 12, 45);
-export const AFTERNOON_SLOTS = generateSlots(13, 0, 19, 45);
+export const AFTERNOON_SLOTS = generateSlots(13, 0, 18, 45);
 
 // ---------------------------------------------------------------------------
 // Treatment master  ※ 施術種別 (変更頻度低 → フロントで保持)
