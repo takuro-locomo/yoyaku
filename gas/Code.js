@@ -122,6 +122,15 @@ function _route(action, params) {
     case 'upsertService':
       return _buildResponse({ success: true, data: Resource.upsertService(params) });
 
+    // --- LINE予約検出 ---
+    case 'getLineMessages':
+      return _buildResponse({ success: true, data: SheetService.findWhere('lineMessages', function(r) {
+        return r.status === 'detected';
+      })});
+
+    case 'markLineMessageRead':
+      return _buildResponse({ success: true, data: SheetService.updateById('lineMessages', params.id, { status: 'read' }) });
+
     default:
       return _buildResponse({ success: false, error: `Unknown action: ${action}` });
   }
@@ -176,4 +185,19 @@ function _buildResponse(data) {
   return ContentService
     .createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * メール通知先を設定する (1回実行したら削除してOK)
+ */
+function setStaffEmail() {
+  var props = PropertiesService.getScriptProperties();
+  props.setProperty('STAFF_EMAIL', 'takuro1006@gmail.com');
+  Logger.log('STAFF_EMAIL 設定完了');
+}
+
+function setAdminUrl() {
+  PropertiesService.getScriptProperties()
+    .setProperty('ADMIN_APP_URL', 'https://admin-two-delta-23.vercel.app/schedule');
+  Logger.log('ADMIN_APP_URL 設定完了');
 }
