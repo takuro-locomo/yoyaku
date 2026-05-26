@@ -395,16 +395,6 @@ const Reservation = (() => {
    */
   function upsertScheduleReservation(data) {
     if (data.id) {
-      // 更新: 自身を除いた競合チェック
-      var updateConflicts = _checkScheduleConflicts(
-        data.date, data.machineId, data.timeSlot, Number(data.durationSlots), data.id
-      );
-      if (updateConflicts.length > 0) {
-        throw new Error(
-          'この機械・時間帯にはすでに予約が入っています (予約ID: ' +
-          updateConflicts.map(function(r) { return r.id; }).join(', ') + ')'
-        );
-      }
       var updateFields = {
         machineId:     data.machineId,
         timeSlot:      data.timeSlot,
@@ -424,17 +414,6 @@ const Reservation = (() => {
     const lock = LockService.getScriptLock();
     try {
       lock.waitLock(10000);
-
-      // 新規作成: ロック取得後に競合チェック (同時リクエストによる二重登録を防ぐ)
-      var createConflicts = _checkScheduleConflicts(
-        data.date, data.machineId, data.timeSlot, Number(data.durationSlots), ''
-      );
-      if (createConflicts.length > 0) {
-        throw new Error(
-          'この機械・時間帯にはすでに予約が入っています (予約ID: ' +
-          createConflicts.map(function(r) { return r.id; }).join(', ') + ')'
-        );
-      }
 
       const record = {
         id:            SheetService.generateId(),

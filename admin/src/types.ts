@@ -64,7 +64,8 @@ export interface Patient {
 
 export interface Machine {
   id: string;
-  name: string; // may contain \n for multi-line display
+  name: string;          // may contain \n for multi-line display
+  treatmentIds?: string[]; // if set (length > 1), show treatment dropdown in modal
 }
 
 export interface MachineArea {

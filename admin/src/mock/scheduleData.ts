@@ -1,7 +1,8 @@
-import type { MachineArea, Treatment, ScheduleStaff } from '../types';
+import type { Machine, MachineArea, Treatment, ScheduleStaff } from '../types';
 
 // ---------------------------------------------------------------------------
 // Machine areas and columns  ※ GAS API 未接続時のフォールバック
+// 2F エリアは右端に配置
 // ---------------------------------------------------------------------------
 export const MACHINE_AREAS: MachineArea[] = [
   {
@@ -16,19 +17,11 @@ export const MACHINE_AREAS: MachineArea[] = [
     ],
   },
   {
-    id: 'area-2f-pico',
-    name: '2F',
-    areaColor: '#fce7f3',
-    machines: [
-      { id: 'm-pic', name: 'ピコシュア\nエリート' },
-    ],
-  },
-  {
     id: 'area-ope',
     name: 'Ope室',
     areaColor: '#fee2e2',
     machines: [
-      { id: 'm-ope', name: 'Vビーム\nマイセル/エコ2\nスペクトラ' },
+      { id: 'm-ope', name: 'Vビーム\nマイセル/エコ2\nスペクトラ', treatmentIds: ['t-20', 't-15', 't-19', 't-05'] },
     ],
   },
   {
@@ -36,7 +29,7 @@ export const MACHINE_AREAS: MachineArea[] = [
     name: '診察室',
     areaColor: '#dcfce7',
     machines: [
-      { id: 'm-con', name: 'BTX\nhy BNLS' },
+      { id: 'm-con', name: 'BTX\nhy BNLS', treatmentIds: ['t-06', 't-07', 't-08', 't-17'] },
     ],
   },
   {
@@ -44,7 +37,15 @@ export const MACHINE_AREAS: MachineArea[] = [
     name: '1F',
     areaColor: '#fef9c3',
     machines: [
-      { id: 'm-moz', name: 'モザイク\nヒーライト' },
+      { id: 'm-moz', name: 'モザイク\nヒーライト', treatmentIds: ['t-10', 't-11'] },
+    ],
+  },
+  {
+    id: 'area-2f-pico',
+    name: '2F',
+    areaColor: '#fce7f3',
+    machines: [
+      { id: 'm-pic', name: 'ピコシュア\nエリート' },
     ],
   },
   {
@@ -59,6 +60,37 @@ export const MACHINE_AREAS: MachineArea[] = [
     ],
   },
 ];
+
+// ---------------------------------------------------------------------------
+// 機械名→施術ID マッピング（GAS API 取得時に treatmentIds が付かない場合の補完）
+// ---------------------------------------------------------------------------
+const MACHINE_TREATMENT_RULES: Array<{ keywords: string[]; ids: string[] }> = [
+  { keywords: ['Vビーム', 'スペクトラ', 'マイセル'], ids: ['t-20', 't-15', 't-19', 't-05'] },
+  { keywords: ['BTX', 'BNLS'],                       ids: ['t-06', 't-07', 't-08', 't-17'] },
+  { keywords: ['モザイク', 'ヒーライト'],             ids: ['t-10', 't-11'] },
+];
+
+/**
+ * エリア配列を「2F系は右端」になるよう並べ替える。
+ * GAS API の返却順（スプレッドシート順）に依存しないようフロントで正規化する。
+ */
+export function sortMachineAreas(areas: MachineArea[]): MachineArea[] {
+  return [...areas].sort((a, b) => {
+    const a2f = a.name.includes('2F') ? 1 : 0;
+    const b2f = b.name.includes('2F') ? 1 : 0;
+    return a2f - b2f;
+  });
+}
+
+/**
+ * 機械の treatmentIds を解決する。
+ * machine.treatmentIds が設定されていれば優先し、なければ機械名のキーワードで補完する。
+ */
+export function resolveTreatmentIds(machine: Machine): string[] | undefined {
+  if (machine.treatmentIds && machine.treatmentIds.length > 0) return machine.treatmentIds;
+  const rule = MACHINE_TREATMENT_RULES.find(r => r.keywords.every(k => machine.name.includes(k)));
+  return rule?.ids;
+}
 
 export const ALL_MACHINES = MACHINE_AREAS.flatMap(a => a.machines);
 
@@ -101,6 +133,8 @@ export const mockTreatments: Treatment[] = [
   { id: 't-16', name: 'メディオスター',            shortName: 'メディオ',    defaultDurationSlots: 2,  color: '#d1fae5' },
   { id: 't-17', name: '診察',                     shortName: '診察',        defaultDurationSlots: 2,  color: '#f1f5f9' },
   { id: 't-18', name: 'ケミカルピーリング',         shortName: 'ピーリング',  defaultDurationSlots: 2,  color: '#fce7f3' },
+  { id: 't-19', name: 'マイセル',                  shortName: 'マイセル',    defaultDurationSlots: 2,  color: '#ffe4e6' },
+  { id: 't-20', name: 'エコ2',                     shortName: 'エコ2',       defaultDurationSlots: 2,  color: '#ffd6e0' },
 ];
 
 // ---------------------------------------------------------------------------

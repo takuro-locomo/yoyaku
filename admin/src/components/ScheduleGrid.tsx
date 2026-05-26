@@ -31,7 +31,7 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
   const getStaff     = (id: string) => staff.find(s => s.id === id);
 
   return (
-    <div className="overflow-auto schedule-scroll print:overflow-visible">
+    <div className="overflow-auto h-full schedule-scroll print:overflow-visible">
       <table
         className="border-collapse text-xs schedule-grid-table"
         style={{ minWidth: '1050px', tableLayout: 'fixed', width: '100%' }}
@@ -48,7 +48,7 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
           <tr>
             <th
               rowSpan={2}
-              className="border border-slate-300 bg-slate-100 text-center text-[10px] font-bold text-slate-600 sticky left-0 z-20 align-middle"
+              className="border border-slate-300 bg-slate-100 text-center text-[10px] font-bold text-slate-600 sticky top-0 left-0 z-30 align-middle"
               style={{ width: '52px' }}
             >
               時間
@@ -57,7 +57,7 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
               <th
                 key={area.id}
                 colSpan={area.machines.length}
-                className="border border-slate-300 text-center text-[11px] font-bold text-slate-700 py-1"
+                className="border border-slate-300 text-center text-[11px] font-bold text-slate-700 py-1 sticky top-0 z-20"
                 style={{ backgroundColor: area.areaColor }}
               >
                 {area.name}
@@ -71,8 +71,8 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
               return (
                 <th
                   key={m.id}
-                  className="border border-slate-300 text-center text-[9px] font-semibold text-slate-600 py-0.5 px-0.5 leading-tight whitespace-pre-line"
-                  style={{ backgroundColor: area.areaColor + '80' }}
+                  className="border border-slate-300 text-center text-[9px] font-semibold text-slate-600 py-0.5 px-0.5 leading-tight whitespace-pre-line sticky z-10"
+                  style={{ top: '26px', backgroundColor: area.areaColor }}
                 >
                   {m.name}
                 </th>
@@ -94,7 +94,7 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
                       ? 'border-slate-400 bg-slate-200 font-bold text-slate-700 border-t-2'
                       : 'border-slate-200 bg-slate-50 text-slate-400'
                   }`}
-                  style={{ height: isHour ? '28px' : '22px' }}
+                  style={{ height: '50px' }}
                 >
                   {displayTime}
                 </td>

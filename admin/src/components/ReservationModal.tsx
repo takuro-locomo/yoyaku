@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import type { Machine, ScheduleReservation, ScheduleStaff } from '../types';
-import { mockTreatments } from '../mock/scheduleData';
+import { mockTreatments, resolveTreatmentIds } from '../mock/scheduleData';
+
+const DURATION_OPTIONS = [
+  { label: '15分',  slots: 1 },
+  { label: '30分',  slots: 2 },
+  { label: '45分',  slots: 3 },
+  { label: '60分',  slots: 4 },
+  { label: '90分',  slots: 6 },
+  { label: '120分', slots: 8 },
+];
 
 interface Props {
   open: boolean;
@@ -9,6 +18,7 @@ interface Props {
   onDelete: (id: string) => void;
   initialMachineId?: string;
   initialTimeSlot?: string;
+  initialStaffId?: string;
   reservation?: ScheduleReservation;
   date: string;
   machines: Machine[];
@@ -17,15 +27,24 @@ interface Props {
 
 export default function ReservationModal({
   open, onClose, onSave, onDelete,
-  initialMachineId, initialTimeSlot, reservation, date, machines, staff,
+  initialMachineId, initialTimeSlot, initialStaffId, reservation, date, machines, staff,
 }: Props) {
-  const [patientName,    setPatientName]    = useState('');
-  const [treatmentId,    setTreatmentId]    = useState(mockTreatments[0].id);
-  const [staffId,        setStaffId]        = useState('');
-  const [durationSlots,  setDurationSlots]  = useState(mockTreatments[0].defaultDurationSlots);
-  const [note,           setNote]           = useState('');
+  const [patientName,   setPatientName]   = useState('');
+  const [treatmentId,   setTreatmentId]   = useState('');
+  const [staffId,       setStaffId]       = useState('');
+  const [durationSlots, setDurationSlots] = useState(1);
+  const [note,          setNote]          = useState('');
 
   const isEdit = !!reservation;
+  const machine = machines.find(m => m.id === (reservation?.machineId ?? initialMachineId));
+
+  // 複数施術が登録された列のみドロップダウンを表示
+  // GAS API 取得時に treatmentIds が付かない場合は機械名キーワードで補完
+  const resolvedIds = machine ? resolveTreatmentIds(machine) : undefined;
+  const treatmentOptions = resolvedIds && resolvedIds.length > 1
+    ? mockTreatments.filter(t => resolvedIds.includes(t.id))
+    : [];
+  const showTreatment = treatmentOptions.length > 1;
 
   useEffect(() => {
     if (!open) return;
@@ -37,28 +56,30 @@ export default function ReservationModal({
       setNote(reservation.note);
     } else {
       setPatientName('');
-      setTreatmentId(mockTreatments[0].id);
-      setStaffId(staff[0]?.id ?? '');
-      setDurationSlots(mockTreatments[0].defaultDurationSlots);
+      setTreatmentId(resolvedIds?.[0] ?? '');
+      setStaffId(initialStaffId ?? '');
+      setDurationSlots(1);
       setNote('');
     }
-  }, [open, reservation]);
+  }, [open, reservation, initialStaffId]);
 
   const handleTreatmentChange = (id: string) => {
     setTreatmentId(id);
+    // 施術切替時に対応するデフォルト所要時間を自動選択
     const t = mockTreatments.find(t => t.id === id);
-    if (t) setDurationSlots(t.defaultDurationSlots);
+    if (t && DURATION_OPTIONS.some(d => d.slots === t.defaultDurationSlots)) {
+      setDurationSlots(t.defaultDurationSlots);
+    }
   };
 
   const handleSave = () => {
-    if (!patientName.trim()) return;
     onSave({
-      id:            reservation?.id,
+      id:           reservation?.id,
       date,
-      machineId:     reservation?.machineId ?? initialMachineId ?? '',
-      timeSlot:      reservation?.timeSlot  ?? initialTimeSlot  ?? '',
+      machineId:    reservation?.machineId ?? initialMachineId ?? '',
+      timeSlot:     reservation?.timeSlot  ?? initialTimeSlot  ?? '',
       durationSlots,
-      patientName:   patientName.trim(),
+      patientName:  patientName.trim(),
       treatmentId,
       staffId,
       note,
@@ -68,10 +89,8 @@ export default function ReservationModal({
 
   if (!open) return null;
 
-  const machine    = machines.find(m => m.id === (reservation?.machineId ?? initialMachineId));
-  const treatment  = mockTreatments.find(t => t.id === treatmentId);
-  const slot       = reservation?.timeSlot ?? initialTimeSlot ?? '';
-  const durationMin = durationSlots * 15;
+  const slot           = reservation?.timeSlot ?? initialTimeSlot ?? '';
+  const selectedStaff  = staff.find(s => s.id === staffId);
 
   return (
     <div
@@ -79,7 +98,7 @@ export default function ReservationModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-[420px] max-h-[90vh] overflow-y-auto p-6"
+        className="bg-white rounded-2xl shadow-2xl w-[400px] max-h-[90vh] overflow-y-auto p-6"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -88,18 +107,27 @@ export default function ReservationModal({
         </h2>
 
         {/* Context pill */}
-        <div className="flex gap-3 bg-slate-50 rounded-xl px-4 py-2.5 mb-5 text-sm text-slate-600">
+        <div className="flex flex-wrap items-center gap-2 bg-slate-50 rounded-xl px-4 py-2.5 mb-5 text-sm text-slate-600">
           <span>🕐 {slot}</span>
-          <span>·</span>
-          <span>💆 {machine?.name.replace(/\n/g, ' ')}</span>
+          <span className="text-slate-300">·</span>
+          <span>💆 {machine?.name.replace(/\n/g, ' / ')}</span>
+          {selectedStaff && (
+            <>
+              <span className="text-slate-300">·</span>
+              <span
+                className="text-xs px-2 py-0.5 rounded-full text-slate-700 font-medium"
+                style={{ backgroundColor: selectedStaff.color }}
+              >
+                {selectedStaff.name}
+              </span>
+            </>
+          )}
         </div>
 
         <div className="space-y-4">
           {/* Patient name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              患者名 <span className="text-red-400">*</span>
-            </label>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">患者名</label>
             <input
               type="text"
               value={patientName}
@@ -111,72 +139,41 @@ export default function ReservationModal({
             />
           </div>
 
-          {/* Treatment */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              施術内容 <span className="text-red-400">*</span>
-            </label>
-            <select
-              value={treatmentId}
-              onChange={e => handleTreatmentChange(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400 bg-white"
-            >
-              {mockTreatments.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-            {treatment && (
-              <div
-                className="mt-1.5 inline-block text-xs px-2 py-0.5 rounded-full text-slate-600"
-                style={{ backgroundColor: treatment.color }}
+          {/* Treatment — 複数施術列のみ表示 */}
+          {showTreatment && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                施術内容
+              </label>
+              <select
+                value={treatmentId}
+                onChange={e => handleTreatmentChange(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400 bg-white"
               >
-                {treatment.shortName} · デフォルト {treatment.defaultDurationSlots * 15}分
-              </div>
-            )}
-          </div>
+                {treatmentOptions.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
-          {/* Staff */}
+          {/* Duration buttons */}
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              担当スタッフ <span className="text-red-400">*</span>
-            </label>
-            <div className="flex gap-2">
-              {staff.map(s => (
+            <label className="block text-xs font-semibold text-slate-600 mb-2">所要時間</label>
+            <div className="flex gap-1.5">
+              {DURATION_OPTIONS.map(({ label, slots }) => (
                 <button
-                  key={s.id}
-                  onClick={() => setStaffId(s.id)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all border-2 ${
-                    staffId === s.id
-                      ? 'border-indigo-400 text-slate-800 shadow-sm'
-                      : 'border-transparent text-slate-500 hover:border-slate-200'
+                  key={slots}
+                  onClick={() => setDurationSlots(slots)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all border-2 ${
+                    durationSlots === slots
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
                   }`}
-                  style={{ backgroundColor: staffId === s.id ? s.color : '#f8fafc' }}
                 >
-                  {s.name}
+                  {label}
                 </button>
               ))}
-            </div>
-          </div>
-
-          {/* Duration */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              所要時間 — <span className="text-indigo-600 font-bold">{durationMin}分</span>
-              <span className="text-slate-400 font-normal ml-1">({durationSlots}コマ)</span>
-            </label>
-            <input
-              type="range"
-              min={1}
-              max={16}
-              value={durationSlots}
-              onChange={e => setDurationSlots(Number(e.target.value))}
-              className="w-full accent-indigo-500"
-            />
-            <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
-              <span>15分</span>
-              <span>1時間</span>
-              <span>2時間</span>
-              <span>4時間</span>
             </div>
           </div>
 
@@ -212,7 +209,7 @@ export default function ReservationModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={!patientName.trim()}
+            disabled={false}
             className="px-5 py-2 rounded-lg text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             {isEdit ? '保存' : '追加'}

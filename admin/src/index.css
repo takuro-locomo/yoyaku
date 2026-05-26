@@ -1,10 +1,11 @@
 @import "tailwindcss";
 
+
 /* ── Print styles ───────────────────────────────────────────────────────── */
 @media print {
   @page {
-    size: A4 landscape;
-    margin: 5mm;
+    size: A4 portrait;
+    margin: 8mm;
   }
 
   * {
@@ -25,7 +26,17 @@
     width: 100% !important;
   }
 
-  /* Grid table in print mode */
+  /*
+   * 機械列が多くA4縦には横幅が収まらないため zoom でスケールダウン。
+   * 1000px 前後のテーブル幅 × 0.68 ≈ 680px → A4縦の印刷可能幅(約730px)に収まる。
+   * 午前16スロット: 行高合計 約800px × 0.68 ≈ 544px → A4縦の高さに収まる。
+   */
+  .schedule-scroll {
+    overflow: visible !important;
+    zoom: 0.68;
+    transform-origin: top left;
+  }
+
   .schedule-grid-table {
     font-size: 7pt !important;
     width: 100% !important;
@@ -35,10 +46,5 @@
   .schedule-grid-table td,
   .schedule-grid-table th {
     padding: 1px 2px !important;
-  }
-
-  /* Hide scroll container overflow restriction for print */
-  .schedule-scroll {
-    overflow: visible !important;
   }
 }

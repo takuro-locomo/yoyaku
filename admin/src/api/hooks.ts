@@ -1,6 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import { gasGet, gasPost } from './gasClient';
-import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Staff, Service, Patient, Reservation } from '../types';
+import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Service, Patient, Reservation } from '../types';
 
 // ---------------------------------------------------------------------------
 // 型定義
@@ -47,6 +47,28 @@ export function useScheduleReservations(date: string) {
     staleTime: 30 * 1000, // 30秒キャッシュ
     retry: 1,
   });
+}
+
+// 日付範囲の全予約を並列フェッチしてまとめて返す
+export function useScheduleReservationsRange(dates: string[]) {
+  const results = useQueries({
+    queries: dates.map(date => ({
+      queryKey: ['scheduleReservations', date],
+      queryFn: async () => {
+        const data = await gasGet<ScheduleReservation[]>('getScheduleReservations', { date });
+        return data.map(r => ({
+          ...r,
+          date:     r.date.substring(0, 10),
+          timeSlot: r.timeSlot.includes('T') ? r.timeSlot.split('T')[1].slice(0, 5) : r.timeSlot,
+        }));
+      },
+      staleTime: 30 * 1000,
+      retry: 1,
+    })),
+  });
+  const data    = results.flatMap(r => r.data ?? []);
+  const isLoading = results.some(r => r.isLoading);
+  return { data, isLoading };
 }
 
 export function useUpsertScheduleReservation() {
