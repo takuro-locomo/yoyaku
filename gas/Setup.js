@@ -95,7 +95,8 @@ function initSpreadsheet() {
       // 予約表の操作ログ (追加=create / 変更=update / 削除=delete)
       name: 'history',
       headers: ['id','action','at','reservationId','date','timeSlot',
-                'machineId','patientName','treatmentId','staffId'],
+                'machineId','patientName','treatmentId','staffId',
+                'checkedDr','checkedDrAt','checkedJimu','checkedJimuAt'],
     },
   ];
 

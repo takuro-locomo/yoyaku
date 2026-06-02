@@ -114,4 +114,10 @@ export interface HistoryEntry {
   patientName: string;
   treatmentId: string;
   staffId: string;
+  checkedDr?: boolean;     // ドクター確認済み
+  checkedDrAt?: string;
+  checkedJimu?: boolean;   // 事務確認済み
+  checkedJimuAt?: string;
 }
+
+export type CheckRole = 'dr' | 'jimu';

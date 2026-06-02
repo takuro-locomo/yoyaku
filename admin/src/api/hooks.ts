@@ -1,6 +1,6 @@
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import { gasGet, gasPost } from './gasClient';
-import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Service, Patient, Reservation, HistoryEntry } from '../types';
+import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Service, Patient, Reservation, HistoryEntry, CheckRole } from '../types';
 
 // ---------------------------------------------------------------------------
 // 型定義
@@ -121,13 +121,37 @@ export function useScheduleHistory(days = 3, enabled = true) {
       // "1899-12-30T09:00:00+09:00" で返す場合があるため正規化する
       return data.map(h => ({
         ...h,
-        date:     (h.date ?? '').substring(0, 10),
-        timeSlot: h.timeSlot?.includes('T') ? h.timeSlot.split('T')[1].slice(0, 5) : h.timeSlot,
+        date:        (h.date ?? '').substring(0, 10),
+        timeSlot:    h.timeSlot?.includes('T') ? h.timeSlot.split('T')[1].slice(0, 5) : h.timeSlot,
+        checkedDr:   h.checkedDr === true || (h.checkedDr as unknown) === 'TRUE',
+        checkedJimu: h.checkedJimu === true || (h.checkedJimu as unknown) === 'TRUE',
       }));
     },
     enabled,
     staleTime: 30 * 1000,
     retry: 1,
+  });
+}
+
+// 履歴の確認チェック (Dr / 事務) を更新する。楽観的更新でUIを即反映。
+export function useSetHistoryChecked() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; role: CheckRole; checked: boolean }) =>
+      gasPost<{ id: string; role: CheckRole; checked: boolean }>('setHistoryChecked', vars),
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: ['scheduleHistory'] });
+      const field = vars.role === 'dr' ? 'checkedDr' : 'checkedJimu';
+      const snapshots = qc.getQueriesData<HistoryEntry[]>({ queryKey: ['scheduleHistory'] });
+      qc.setQueriesData<HistoryEntry[]>({ queryKey: ['scheduleHistory'] }, (old) =>
+        old?.map(h => h.id === vars.id ? { ...h, [field]: vars.checked } : h),
+      );
+      return { snapshots };
+    },
+    onError: (_err, _vars, ctx) => {
+      // 失敗時はロールバック
+      ctx?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
+    },
   });
 }
 

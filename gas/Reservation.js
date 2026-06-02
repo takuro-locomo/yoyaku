@@ -355,6 +355,7 @@ const Reservation = (() => {
   const HISTORY_HEADERS = [
     'id', 'action', 'at', 'reservationId', 'date', 'timeSlot',
     'machineId', 'patientName', 'treatmentId', 'staffId',
+    'checkedDr', 'checkedDrAt', 'checkedJimu', 'checkedJimuAt',
   ];
 
   /**
@@ -381,6 +382,31 @@ const Reservation = (() => {
     } catch (err) {
       Logger.log('history log failed (' + action + '): ' + err);
     }
+  }
+
+  /**
+   * 履歴行の確認チェックを更新する。
+   * @param {string} id    - 履歴ID
+   * @param {string} role  - 'dr' (ドクター確認) | 'jimu' (事務確認)
+   * @param {boolean} checked
+   */
+  function setHistoryChecked(id, role, checked) {
+    if (!id) throw new Error('id は必須です');
+    SheetService.ensureSheet(HISTORY_SHEET, HISTORY_HEADERS);
+    const val = (checked === true || checked === 'true');
+    const updates = {};
+    if (role === 'dr') {
+      updates.checkedDr   = val;
+      updates.checkedDrAt = val ? _now() : '';
+    } else if (role === 'jimu') {
+      updates.checkedJimu   = val;
+      updates.checkedJimuAt = val ? _now() : '';
+    } else {
+      throw new Error("role は 'dr' / 'jimu' のいずれかです");
+    }
+    const ok = SheetService.updateById(HISTORY_SHEET, id, updates);
+    if (!ok) throw new Error('履歴が見つかりません: ' + id);
+    return { id: id, role: role, checked: val };
   }
 
   /**
@@ -529,6 +555,6 @@ const Reservation = (() => {
   return {
     create, update, cancel, getById, getByDate, getByPatientId, getAvailableSlots, checkConflicts,
     getScheduleReservations, upsertScheduleReservation, deleteScheduleReservation,
-    getScheduleHistory,
+    getScheduleHistory, setHistoryChecked,
   };
 })();

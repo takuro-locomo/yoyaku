@@ -149,7 +149,7 @@ const SheetService = (() => {
 
   /**
    * シートが存在しなければヘッダー付きで作成する。
-   * 既存シートはそのまま返す（ログ等の追記専用シートを安全に用意するため）。
+   * 既存シートの場合は、不足しているヘッダー列を末尾に追加する（スキーマ追加に追従）。
    * @param {string} name
    * @param {string[]} headers
    * @returns {Sheet}
@@ -157,7 +157,20 @@ const SheetService = (() => {
   function ensureSheet(name, headers) {
     const ss = _getSpreadsheet();
     let sheet = ss.getSheetByName(name);
-    if (sheet) return sheet;
+    if (sheet) {
+      const lastCol = sheet.getLastColumn();
+      const existing = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+      const missing = headers.filter(h => existing.indexOf(h) === -1);
+      if (missing.length > 0) {
+        const start = existing.length + 1;
+        sheet.getRange(1, start, 1, missing.length).setValues([missing]);
+        const added = sheet.getRange(1, start, 1, missing.length);
+        added.setFontWeight('bold');
+        added.setBackground('#4A86E8');
+        added.setFontColor('#FFFFFF');
+      }
+      return sheet;
+    }
 
     sheet = ss.insertSheet(name);
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);

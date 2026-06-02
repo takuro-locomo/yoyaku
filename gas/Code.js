@@ -99,6 +99,9 @@ function _route(action, params) {
     case 'getScheduleHistory':
       return _buildResponse({ success: true, data: Reservation.getScheduleHistory(params.days) });
 
+    case 'setHistoryChecked':
+      return _buildResponse({ success: true, data: Reservation.setHistoryChecked(params.id, params.role, params.checked) });
+
     // --- マスタ取得 (個別) ---
     case 'getRooms':
       return _buildResponse({ success: true, data: Resource.getRooms() });

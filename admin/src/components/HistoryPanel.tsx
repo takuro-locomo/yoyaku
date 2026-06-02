@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import type { Machine, ScheduleStaff } from '../types';
 import { mockTreatments } from '../mock/scheduleData';
-import { useScheduleHistory } from '../api/hooks';
+import { useScheduleHistory, useSetHistoryChecked } from '../api/hooks';
+import type { CheckRole } from '../types';
 
 interface Props {
   open: boolean;
@@ -41,6 +42,10 @@ function formatResDate(date: string): string {
 
 export default function HistoryPanel({ open, onClose, machines, staff }: Props) {
   const { data: history = [], isLoading, isError, refetch } = useScheduleHistory(7, open);
+  const setChecked = useSetHistoryChecked();
+
+  const toggle = (id: string, role: CheckRole, checked: boolean) =>
+    setChecked.mutate({ id, role, checked });
 
   const machineName = useMemo(() => {
     const m = new Map(machines.map(x => [x.id, x.name.replace(/\n/g, ' ')]));
@@ -131,6 +136,32 @@ export default function HistoryPanel({ open, onClose, machines, staff }: Props) 
                     <span>{machineName(h.machineId)}</span>
                     {treatment && (<><span>·</span><span>{treatment}</span></>)}
                     {sName && (<><span>·</span><span>{sName}</span></>)}
+                  </div>
+
+                  {/* 確認チェック (Dr / 事務) 横並び */}
+                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-center gap-2">
+                    <span className="text-[10px] text-slate-400 font-medium">確認</span>
+                    {([
+                      { role: 'dr'   as CheckRole, label: 'Dr', on: !!h.checkedDr },
+                      { role: 'jimu' as CheckRole, label: '事務', on: !!h.checkedJimu },
+                    ]).map(({ role, label, on }) => (
+                      <label
+                        key={role}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border cursor-pointer select-none text-xs font-medium transition-colors ${
+                          on
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={e => toggle(h.id, role, e.target.checked)}
+                          className="accent-emerald-500 w-3.5 h-3.5"
+                        />
+                        {label}
+                      </label>
+                    ))}
                   </div>
                 </li>
               );
