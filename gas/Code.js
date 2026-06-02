@@ -96,6 +96,9 @@ function _route(action, params) {
     case 'deleteScheduleReservation':
       return _buildResponse({ success: true, data: Reservation.deleteScheduleReservation(params.id) });
 
+    case 'getScheduleHistory':
+      return _buildResponse({ success: true, data: Reservation.getScheduleHistory(params.days) });
+
     // --- マスタ取得 (個別) ---
     case 'getRooms':
       return _buildResponse({ success: true, data: Resource.getRooms() });

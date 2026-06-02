@@ -30,7 +30,7 @@ function resetAndSetup() {
   const ss = SpreadsheetApp.openById(
     PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID')
   );
-  const MANAGED = ['reservations','rooms','equipment','staff','services','patients','scheduleReservations','patientReservations'];
+  const MANAGED = ['reservations','rooms','equipment','staff','services','patients','scheduleReservations','patientReservations','history'];
   MANAGED.forEach(name => {
     const sheet = ss.getSheetByName(name);
     if (sheet) ss.deleteSheet(sheet);
@@ -90,6 +90,12 @@ function initSpreadsheet() {
       name: 'patientReservations',
       headers: ['id','menuId','menuName','durationMin','patientName','phone','lineUserId',
                 'date','startTime','status','confirmationNo','note','createdAt'],
+    },
+    {
+      // 予約表の操作ログ (追加=create / 変更=update / 削除=delete)
+      name: 'history',
+      headers: ['id','action','at','reservationId','date','timeSlot',
+                'machineId','patientName','treatmentId','staffId'],
     },
   ];
 

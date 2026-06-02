@@ -147,10 +147,32 @@ const SheetService = (() => {
     return false;
   }
 
+  /**
+   * シートが存在しなければヘッダー付きで作成する。
+   * 既存シートはそのまま返す（ログ等の追記専用シートを安全に用意するため）。
+   * @param {string} name
+   * @param {string[]} headers
+   * @returns {Sheet}
+   */
+  function ensureSheet(name, headers) {
+    const ss = _getSpreadsheet();
+    let sheet = ss.getSheetByName(name);
+    if (sheet) return sheet;
+
+    sheet = ss.insertSheet(name);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    const headerRange = sheet.getRange(1, 1, 1, headers.length);
+    headerRange.setFontWeight('bold');
+    headerRange.setBackground('#4A86E8');
+    headerRange.setFontColor('#FFFFFF');
+    sheet.setFrozenRows(1);
+    return sheet;
+  }
+
   /** UUID v4 を生成する */
   function generateId() {
     return Utilities.getUuid();
   }
 
-  return { findAll, findById, findWhere, insert, updateById, deleteById, generateId };
+  return { findAll, findById, findWhere, insert, updateById, deleteById, ensureSheet, generateId };
 })();

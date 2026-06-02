@@ -347,6 +347,57 @@ const Reservation = (() => {
 
   const SCHEDULE_SHEET = 'scheduleReservations';
 
+  // ---------------------------------------------------------------------------
+  // 操作履歴 (予約表の 追加 / 変更 / 削除 ログ)
+  // ---------------------------------------------------------------------------
+
+  const HISTORY_SHEET = 'history';
+  const HISTORY_HEADERS = [
+    'id', 'action', 'at', 'reservationId', 'date', 'timeSlot',
+    'machineId', 'patientName', 'treatmentId', 'staffId',
+  ];
+
+  /**
+   * 予約表の操作を history シートに1行記録する。
+   * ログ失敗が予約操作本体を巻き込まないよう、例外は握りつぶす。
+   * @param {'create'|'update'|'delete'} action
+   * @param {object} rec - 対象の予約レコード
+   */
+  function _logHistory(action, rec) {
+    try {
+      SheetService.ensureSheet(HISTORY_SHEET, HISTORY_HEADERS);
+      SheetService.insert(HISTORY_SHEET, {
+        id:            SheetService.generateId(),
+        action:        action,
+        at:            _now(),
+        reservationId: rec.id || '',
+        date:          String(rec.date || '').substring(0, 10),
+        timeSlot:      rec.timeSlot || '',
+        machineId:     rec.machineId || '',
+        patientName:   rec.patientName || '',
+        treatmentId:   rec.treatmentId || '',
+        staffId:       rec.staffId || '',
+      });
+    } catch (err) {
+      Logger.log('history log failed (' + action + '): ' + err);
+    }
+  }
+
+  /**
+   * 予約表の操作履歴を直近 days 日分、新しい順で返す。
+   * @param {number} [days=3]
+   */
+  function getScheduleHistory(days) {
+    const n = Number(days) || 3;
+    SheetService.ensureSheet(HISTORY_SHEET, HISTORY_HEADERS);
+    const cutoff = new Date(Date.now() - n * 24 * 60 * 60 * 1000);
+    return SheetService.findWhere(HISTORY_SHEET, function(r) {
+      return r.at && new Date(r.at) >= cutoff;
+    }).sort(function(a, b) {
+      return new Date(b.at) - new Date(a.at);
+    });
+  }
+
   /**
    * 指定日の予約表データを返す。
    * @param {string} date - YYYY-MM-DD
@@ -418,7 +469,9 @@ const Reservation = (() => {
       // status が明示されている場合のみ上書き (省略時は既存値を保持)
       if (data.status) updateFields.status = data.status;
       SheetService.updateById(SCHEDULE_SHEET, data.id, updateFields);
-      return SheetService.findById(SCHEDULE_SHEET, data.id);
+      var updated = SheetService.findById(SCHEDULE_SHEET, data.id);
+      _logHistory('update', updated || Object.assign({ id: data.id }, updateFields));
+      return updated;
     }
 
     const lock = LockService.getScriptLock();
@@ -452,6 +505,7 @@ const Reservation = (() => {
         updatedAt:     _now(),
       };
       SheetService.insert(SCHEDULE_SHEET, record);
+      _logHistory('create', record);
       return record;
     } finally {
       lock.releaseLock();
@@ -464,13 +518,17 @@ const Reservation = (() => {
    */
   function deleteScheduleReservation(id) {
     if (!id) throw new Error('id は必須です');
+    // 削除前にレコードを取得して履歴に内容を残す
+    const existing = SheetService.findById(SCHEDULE_SHEET, id);
     const deleted = SheetService.deleteById(SCHEDULE_SHEET, id);
     if (!deleted) throw new Error('予約が見つかりません: ' + id);
+    _logHistory('delete', existing || { id: id });
     return { id: id };
   }
 
   return {
     create, update, cancel, getById, getByDate, getByPatientId, getAvailableSlots, checkConflicts,
     getScheduleReservations, upsertScheduleReservation, deleteScheduleReservation,
+    getScheduleHistory,
   };
 })();

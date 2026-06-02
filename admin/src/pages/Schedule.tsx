@@ -4,6 +4,7 @@ import { MORNING_SLOTS, AFTERNOON_SLOTS, MACHINE_AREAS, mockScheduleStaff, sortM
 import ScheduleGrid from '../components/ScheduleGrid';
 import ReservationModal from '../components/ReservationModal';
 import ConfirmPendingModal from '../components/ConfirmPendingModal';
+import HistoryPanel from '../components/HistoryPanel';
 import { useMasters, useScheduleReservations, useUpsertScheduleReservation, useDeleteScheduleReservation } from '../api/hooks';
 
 type Period = 'morning' | 'afternoon';
@@ -95,6 +96,8 @@ export default function Schedule() {
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingR,    setPendingR]    = useState<ScheduleReservation | undefined>();
+
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -202,6 +205,13 @@ export default function Schedule() {
               {dayReservations.length}件
             </span>
 
+            {/* 変更履歴ボタン */}
+            <button
+              onClick={() => setHistoryOpen(true)}
+              className="p-1.5 rounded-lg bg-slate-100 text-slate-500 text-xs"
+              title="変更履歴"
+            >🕘</button>
+
             {/* 詳細展開ボタン */}
             <button
               onClick={() => setToolbarExpanded(v => !v)}
@@ -296,6 +306,11 @@ export default function Schedule() {
               ))}
             </div>
 
+            <button onClick={() => setHistoryOpen(true)}
+              className="flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+              🕘 変更履歴
+            </button>
+
             <button onClick={() => window.print()}
               className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
               🖨️ 印刷
@@ -388,6 +403,13 @@ export default function Schedule() {
           staff={scheduleStaff}
         />
       )}
+
+      <HistoryPanel
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        machines={allMachines}
+        staff={scheduleStaff}
+      />
     </div>
   );
 }

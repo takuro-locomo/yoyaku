@@ -101,3 +101,17 @@ export interface ScheduleReservation {
   note: string;
   status?: string;     // 'confirmed' (default) | 'pending' (患者予約から自動作成)
 }
+
+// 予約表の操作履歴 (追加 / 変更 / 削除 ログ)
+export interface HistoryEntry {
+  id: string;
+  action: 'create' | 'update' | 'delete';
+  at: string;            // ISO8601 (操作した時刻)
+  reservationId: string;
+  date: string;          // 予約日 YYYY-MM-DD
+  timeSlot: string;      // "09:00"
+  machineId: string;
+  patientName: string;
+  treatmentId: string;
+  staffId: string;
+}

@@ -1,6 +1,6 @@
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import { gasGet, gasPost } from './gasClient';
-import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Service, Patient, Reservation } from '../types';
+import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Service, Patient, Reservation, HistoryEntry } from '../types';
 
 // ---------------------------------------------------------------------------
 // 型定義
@@ -86,6 +86,8 @@ export function useUpsertScheduleReservation() {
             ? old.map(r => r.id === vars.id ? result : r)  // 更新
             : [...old, result],                             // 新規追加
       );
+      // 追加・変更を履歴パネルに反映
+      qc.invalidateQueries({ queryKey: ['scheduleHistory'] });
     },
   });
 }
@@ -100,7 +102,32 @@ export function useDeleteScheduleReservation() {
         ['scheduleReservations', vars.date],
         (old = []) => old.filter(r => r.id !== vars.id),
       );
+      // 削除を履歴パネルに反映
+      qc.invalidateQueries({ queryKey: ['scheduleHistory'] });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 操作履歴 (予約表の 追加 / 変更 / 削除 ログ)
+// ---------------------------------------------------------------------------
+
+export function useScheduleHistory(days = 3, enabled = true) {
+  return useQuery<HistoryEntry[]>({
+    queryKey: ['scheduleHistory', days],
+    queryFn:  async () => {
+      const data = await gasGet<HistoryEntry[]>('getScheduleHistory', { days: String(days) });
+      // SheetService が date を "2026-06-02T00:00:00+09:00"、timeSlot を
+      // "1899-12-30T09:00:00+09:00" で返す場合があるため正規化する
+      return data.map(h => ({
+        ...h,
+        date:     (h.date ?? '').substring(0, 10),
+        timeSlot: h.timeSlot?.includes('T') ? h.timeSlot.split('T')[1].slice(0, 5) : h.timeSlot,
+      }));
+    },
+    enabled,
+    staleTime: 30 * 1000,
+    retry: 1,
   });
 }
 
