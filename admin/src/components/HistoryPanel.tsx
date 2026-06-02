@@ -40,7 +40,7 @@ function formatResDate(date: string): string {
 }
 
 export default function HistoryPanel({ open, onClose, machines, staff }: Props) {
-  const { data: history = [], isLoading, isError, refetch } = useScheduleHistory(3, open);
+  const { data: history = [], isLoading, isError, refetch } = useScheduleHistory(7, open);
 
   const machineName = useMemo(() => {
     const m = new Map(machines.map(x => [x.id, x.name.replace(/\n/g, ' ')]));
@@ -74,7 +74,7 @@ export default function HistoryPanel({ open, onClose, machines, staff }: Props) 
         {/* ヘッダー */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 shrink-0">
           <h2 className="text-base font-bold text-slate-800">予約の変更履歴</h2>
-          <span className="text-xs text-slate-400">直近3日</span>
+          <span className="text-xs text-slate-400">直近7日</span>
           <button
             onClick={() => refetch()}
             className="ml-auto p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 text-sm"
@@ -98,7 +98,7 @@ export default function HistoryPanel({ open, onClose, machines, staff }: Props) 
           )}
           {!isLoading && !isError && history.length === 0 && (
             <p className="text-sm text-slate-400 text-center py-8">
-              直近3日の変更履歴はありません
+              直近7日の変更履歴はありません
             </p>
           )}
 
