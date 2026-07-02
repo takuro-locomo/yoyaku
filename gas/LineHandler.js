@@ -391,6 +391,9 @@ const LineHandler = (() => {
   }
 
   function _dispatchEvent(event) {
+    // 行動ログ（記録専用・失敗しても既存処理に影響なし）
+    try { ActivityLog.log(event); } catch (e) { Logger.log('[LineHandler] ActivityLog error: ' + e.message); }
+
     switch (event.type) {
       case 'message':
         _handleMessage(event);
