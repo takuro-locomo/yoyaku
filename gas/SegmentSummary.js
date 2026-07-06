@@ -25,6 +25,7 @@ const SegmentSummary = (() => {
     '予約', 'キャンペーン', '施術メニュー', 'よくある質問', 'アクセス', 'HP',
     '自由入力', 'CV回数(フォーム返信)', 'ブロック',
     'アクティブ度', '興味(最多ボタン)', '追いかけ対象(予約ボタン→CVなし)',
+    'ステージ', '最終配信', 'ステージメモ',
   ];
 
   function update() {
@@ -62,6 +63,8 @@ const SegmentSummary = (() => {
 
     var now = new Date();
     var activeLimit = new Date(now.getTime() - ACTIVE_DAYS * 24 * 60 * 60 * 1000);
+    var manualMap = Stage.getManualMap();      // 手動ステージ上書き
+    var lastSendMap = Stage.getLastSendMap();  // こちらから最後に配信した日時
 
     var out = Object.keys(users).map(function (id) {
       var u = users[id];
@@ -92,11 +95,21 @@ const SegmentSummary = (() => {
       var followUp = (!u.blocked && u.cv === 0 &&
         (u.buttons['ボタン:予約'] || 0) > 0 && otherKinds >= OTHER_KINDS_MIN) ? '★' : '';
 
+      // ステージ判定（手動上書き > 自動判定）
+      var reactions = btnCounts.reduce(function (a, b) { return a + b; }, 0) + u.free;
+      var manual = manualMap[id];
+      var lastSend = lastSendMap[id] || null;
+      var stage = Stage.compute(
+        { blocked: u.blocked, cv: u.cv, last: u.last, reactions: reactions },
+        manual ? manual.stage : '', lastSend, now
+      );
+
       return [
         id, u.name, u.first, u.last, u.total,
       ].concat(btnCounts).concat([
         u.free, u.cv, u.blocked ? 1 : '',
         level, maxBtn, followUp,
+        stage, lastSend || '', manual ? manual.memo : '',
       ]);
     });
 

@@ -16,15 +16,30 @@
   button:disabled { opacity: .5; }
   .member { display: flex; align-items: center; gap: 8px; padding: 7px 2px; border-bottom: 1px solid #f0f1f3; font-size: 14px; }
   .member input[type=checkbox] { width: 20px; height: 20px; flex: none; }
+  .member .body { flex: 1; min-width: 0; }
   .member .sub { color: #6b7280; font-size: 12px; }
+  .member select.stageSel { width: auto; font-size: 12px; padding: 4px 6px; margin-top: 0; flex: none; max-width: 96px; }
   .note { font-size: 12px; color: #6b7280; }
   .err { color: #dc2626; font-size: 14px; white-space: pre-wrap; }
   .ok { color: #059669; font-size: 14px; white-space: pre-wrap; }
   .count { font-size: 14px; margin: 8px 0 4px; }
+  /* ステージボード */
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .chip { border: 2px solid transparent; border-radius: 10px; padding: 8px 4px; text-align: center; cursor: pointer; background: #f3f4f6; }
+  .chip.active { border-color: #06c755; }
+  .chip .n { font-size: 20px; font-weight: bold; }
+  .chip .s { font-size: 11px; }
+  .st-新規 { background: #dbeafe; color: #1d4ed8; }
+  .st-反応待ち { background: #fef3c7; color: #b45309; }
+  .st-反応あり { background: #dcfce7; color: #15803d; }
+  .st-予約済み { background: #ede9fe; color: #6d28d9; }
+  .st-休眠 { background: #e5e7eb; color: #4b5563; }
+  .st-対象外 { background: #fee2e2; color: #b91c1c; }
+  .badge { display: inline-block; border-radius: 6px; padding: 1px 6px; font-size: 11px; font-weight: bold; }
 </style>
 </head>
 <body>
-  <h1>LINE配信（上野医院）</h1>
+  <h1>LINE配信・ステージ管理（上野医院）</h1>
 
   <div class="card">
     <label>PIN（暗証番号）</label>
@@ -32,12 +47,28 @@
   </div>
 
   <div class="card">
+    <label>ステージボード（タップでそのステージの一覧を表示）</label>
+    <div class="board" id="board"></div>
+    <p class="note">新規=まだ反応なし／反応待ち=配信後まだ反応なし／反応あり=ボタン等の反応あり(未予約)／予約済み=予約フォーム返信あり／休眠=60日以上反応なし／対象外=ブロック・手動除外</p>
+  </div>
+
+  <div class="card">
     <label>グループを選ぶ</label>
     <select id="group">
-      <option value="followup">追いかけ対象（色々見て予約ボタン→未予約）</option>
-      <option value="top50">アクティブ上位50人</option>
-      <option value="top100">アクティブ上位100人</option>
-      <option value="top150">アクティブ上位150人</option>
+      <optgroup label="ステージ別">
+        <option value="stage_new">新規</option>
+        <option value="stage_untouched">反応待ち</option>
+        <option value="stage_connected">反応あり</option>
+        <option value="stage_converted">予約済み</option>
+        <option value="stage_recycle">休眠（再アプローチ）</option>
+        <option value="stage_archive">対象外（確認用）</option>
+      </optgroup>
+      <optgroup label="従来グループ">
+        <option value="followup" selected>追いかけ対象（色々見て予約ボタン→未予約）</option>
+        <option value="top50">アクティブ上位50人</option>
+        <option value="top100">アクティブ上位100人</option>
+        <option value="top150">アクティブ上位150人</option>
+      </optgroup>
     </select>
     <button class="gray" id="btnList" onclick="loadList()">① リストを更新して表示</button>
     <div id="listArea">
@@ -54,15 +85,18 @@
     <label>送るメッセージ</label>
     <textarea id="msg" placeholder="例）いつもありがとうございます。ただいま◯◯キャンペーン中です。ご希望の方はこのトークにご返信ください😊"></textarea>
     <button id="btnSend" onclick="doSend()" disabled>② チェックした人に送信</button>
-    <p class="note">※ チェックを外した人には送りません（月200通の節約に）。送信内容は「配信ログ」シートに記録されます。<br>
-    ※ 母数はLINE行動ログ(7/2開始)に記録された人のみ。50/100/150人グループは記録が貯まるほど増えます。</p>
+    <p class="note">※ チェックを外した人には送りません（月200通の節約に）。送信内容は「配信ログ」シートに記録され、送った相手は「反応待ち」ステージに移ります。<br>
+    ※ 「対象外」ステージの人には送信できません。<br>
+    ※ 母数はLINE行動ログ(7/2開始)に記録された人のみ。記録が貯まるほど増えます。</p>
     <div id="result"></div>
   </div>
 
 <script>
   var users = [];
+  var stages = ['新規', '反応待ち', '反応あり', '予約済み', '休眠', '対象外'];
   var pinEl = document.getElementById('pin');
   pinEl.value = localStorage.getItem('linePin') || '';
+  renderBoard(null);  // 初期表示（人数は「-」、リスト更新で埋まる）
 
   function pin() { localStorage.setItem('linePin', pinEl.value); return pinEl.value; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -86,6 +120,60 @@
     updateSendBtn();
   }
 
+  function renderBoard(counts) {
+    var html = '';
+    stages.forEach(function (s) {
+      var n = (counts && counts[s] != null) ? counts[s] : '-';
+      var groupVal = stageToGroup(s);
+      var active = document.getElementById('group').value === groupVal ? ' active' : '';
+      html += '<div class="chip st-' + s + active + '" onclick="pickStage(\'' + groupVal + '\')">'
+        + '<div class="n">' + n + '</div><div class="s">' + s + '</div></div>';
+    });
+    document.getElementById('board').innerHTML = html;
+  }
+  function stageToGroup(s) {
+    return { '新規': 'stage_new', '反応待ち': 'stage_untouched', '反応あり': 'stage_connected',
+             '予約済み': 'stage_converted', '休眠': 'stage_recycle', '対象外': 'stage_archive' }[s];
+  }
+  function pickStage(groupVal) {
+    document.getElementById('group').value = groupVal;
+    loadList();
+  }
+
+  function stageSelHtml(i, current) {
+    var html = '<select class="stageSel" id="st_' + i + '" onchange="changeStage(' + i + ')">';
+    html += '<option value="（自動）">（自動）</option>';
+    stages.forEach(function (s) {
+      html += '<option value="' + s + '"' + (s === current ? ' selected' : '') + '>' + s + '</option>';
+    });
+    return html + '</select>';
+  }
+
+  function changeStage(i) {
+    var u = users[i];
+    var sel = document.getElementById('st_' + i);
+    var newStage = sel.value;
+    var label = (newStage === '（自動）') ? '自動判定に戻す' : '「' + newStage + '」に変更';
+    if (!confirm(u.name + ' さんのステージを' + label + '。よろしいですか？')) {
+      sel.value = u.stage || '（自動）';
+      return;
+    }
+    sel.disabled = true;
+    google.script.run
+      .withSuccessHandler(function (r) {
+        sel.disabled = false;
+        u.stage = (r.stage === '（自動）') ? u.stage : r.stage;
+        document.getElementById('result').innerHTML =
+          '<p class="ok">' + esc(u.name) + ' さんを「' + esc(r.stage) + '」にしました。リストを更新すると反映されます。</p>';
+      })
+      .withFailureHandler(function (e) {
+        sel.disabled = false;
+        sel.value = u.stage || '（自動）';
+        document.getElementById('result').innerHTML = '<p class="err">' + esc(e.message) + '</p>';
+      })
+      .lineConsoleSetStage(pin(), u.userId, u.name, newStage, '');
+  }
+
   function loadList() {
     var el = document.getElementById('list');
     document.getElementById('countLine').textContent = '';
@@ -96,6 +184,7 @@
       .withSuccessHandler(function (r) {
         document.getElementById('btnList').disabled = false;
         users = r.users || [];
+        renderBoard(r.stageCounts);
         document.getElementById('countLine').innerHTML =
           '<b>' + r.count + '人</b>（' + esc(r.groupLabel) + '）／ログに記録済み: ' + r.totalLogged + '人';
         if (!users.length) {
@@ -104,13 +193,17 @@
           return;
         }
         var html = '';
+        var defaultChecked = (r.group === 'stage_archive') ? '' : ' checked';  // 対象外は送信不可なので未チェック
         users.forEach(function (u, i) {
           var sub = '最終: ' + esc(u.lastActive)
-            + (u.level ? '／' + esc(u.level) : '')
             + (u.interest ? '／興味: ' + esc(u.interest) : '')
+            + (u.lastSend ? '／配信: ' + esc(u.lastSend) : '')
             + (u.star ? '／★追いかけ' : '');
-          html += '<div class="member"><input type="checkbox" id="cb_' + i + '" checked onchange="updateSendBtn()">'
-            + '<div><div>' + esc(u.name) + '</div><div class="sub">' + sub + '</div></div></div>';
+          html += '<div class="member"><input type="checkbox" id="cb_' + i + '"' + defaultChecked + ' onchange="updateSendBtn()">'
+            + '<div class="body"><div>' + esc(u.name)
+            + ' <span class="badge st-' + esc(u.stage) + '">' + esc(u.stage) + '</span></div>'
+            + '<div class="sub">' + sub + '</div></div>'
+            + stageSelHtml(i, u.stage) + '</div>';
         });
         el.innerHTML = html;
         document.getElementById('selBtns').style.display = 'block';

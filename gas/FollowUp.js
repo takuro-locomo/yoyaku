@@ -19,13 +19,22 @@ const FollowUp = (() => {
   const COL = {
     userId: 0, name: 1, last: 3, total: 4, reserveBtn: 5,
     cv: 12, blocked: 13, level: 14, interest: 15, followUp: 16,
+    stage: 17, lastSend: 18, stageMemo: 19,
   };
+  const NUM_COLS = 20;
 
   const GROUPS = {
     followup: { label: '追いかけ対象（色々見て予約ボタン→未予約）' },
     top50:    { label: 'アクティブ上位50人',  n: 50 },
     top100:   { label: 'アクティブ上位100人', n: 100 },
     top150:   { label: 'アクティブ上位150人', n: 150 },
+    // ステージ別（'stage:新規' のように指定してもよい）
+    stage_new:       { label: 'ステージ: 新規',     stage: '新規' },
+    stage_untouched: { label: 'ステージ: 反応待ち', stage: '反応待ち' },
+    stage_connected: { label: 'ステージ: 反応あり', stage: '反応あり' },
+    stage_converted: { label: 'ステージ: 予約済み', stage: '予約済み' },
+    stage_recycle:   { label: 'ステージ: 休眠',     stage: '休眠' },
+    stage_archive:   { label: 'ステージ: 対象外',   stage: '対象外' },
   };
 
   function _props() { return PropertiesService.getScriptProperties(); }
@@ -51,7 +60,7 @@ const FollowUp = (() => {
     SegmentSummary.update();
     var sheet = _ss().getSheetByName(SHEET_SUMMARY);
     if (!sheet || sheet.getLastRow() < 2) return [];
-    return sheet.getRange(2, 1, sheet.getLastRow() - 1, 17).getValues();
+    return sheet.getRange(2, 1, sheet.getLastRow() - 1, NUM_COLS).getValues();
   }
 
   function _toUser(r) {
@@ -63,7 +72,21 @@ const FollowUp = (() => {
       level: r[COL.level] || '',
       interest: r[COL.interest] || '',
       star: r[COL.followUp] === '★',
+      stage: r[COL.stage] || '',
+      lastSend: _fmt(r[COL.lastSend]),
+      stageMemo: r[COL.stageMemo] || '',
     };
+  }
+
+  /** 全ステージの人数（ブロック含む全員が母数） */
+  function _stageCounts(rows) {
+    var counts = {};
+    Stage.STAGES.forEach(function (s) { counts[s] = 0; });
+    rows.forEach(function (r) {
+      var s = r[COL.stage];
+      if (counts[s] !== undefined) counts[s]++;
+    });
+    return counts;
   }
 
   /**
@@ -76,19 +99,32 @@ const FollowUp = (() => {
     group = GROUPS[group] ? group : 'followup';
     var rows = _rows();
     var alive = rows.filter(function (r) { return r[COL.blocked] !== 1; });  // ブロック除外
+    var g = GROUPS[group];
     var picked;
-    if (group === 'followup') {
+    if (g.stage) {
+      // ステージ別。「対象外」だけはブロック済みも含めて表示（確認用）
+      var base = (g.stage === '対象外') ? rows : alive;
+      picked = base.filter(function (r) { return r[COL.stage] === g.stage; });
+    } else if (group === 'followup') {
       picked = alive.filter(function (r) { return r[COL.followUp] === '★'; });
     } else {
-      picked = alive.slice(0, GROUPS[group].n);   // サマリーは最終アクティブ降順
+      picked = alive.slice(0, g.n);   // サマリーは最終アクティブ降順
     }
     return {
       group: group,
-      groupLabel: GROUPS[group].label,
+      groupLabel: g.label,
       totalLogged: alive.length,   // 母数（ログに現れたブロック以外の全員）
       count: picked.length,
       users: picked.map(_toUser),
+      stageCounts: _stageCounts(rows),
+      stages: Stage.STAGES,
     };
+  }
+
+  /** 手動ステージ変更（'（自動）'で自動判定に戻す） */
+  function setStage(pin, userId, name, stage, memo) {
+    _checkPin(pin);
+    return Stage.setManual(userId, name, stage, memo);
   }
 
   /**
@@ -104,13 +140,15 @@ const FollowUp = (() => {
     var token = _props().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
     if (!token) throw new Error('LINE_CHANNEL_ACCESS_TOKEN が未設定です。');
 
-    // 実在＆ブロック以外のIDだけに絞る（名前も配信ログ用に取る）
+    // 実在＆ブロック以外＆「対象外」ステージ以外のIDだけに絞る（名前も配信ログ用に取る）
     var byId = {};
     _rows().forEach(function (r) {
-      if (r[COL.blocked] !== 1) byId[r[COL.userId]] = r[COL.name] || '(名前なし)';
+      if (r[COL.blocked] !== 1 && r[COL.stage] !== '対象外') {
+        byId[r[COL.userId]] = r[COL.name] || '(名前なし)';
+      }
     });
     var targets = userIds.filter(function (id) { return byId[id]; });
-    if (!targets.length) throw new Error('有効な送信先がありません（ブロック済み等）。');
+    if (!targets.length) throw new Error('有効な送信先がありません（ブロック済み・対象外ステージ等）。');
 
     var errors = [];
     for (var i = 0; i < targets.length; i += 500) {   // multicastは1回500人まで
@@ -138,6 +176,12 @@ const FollowUp = (() => {
       new Date(), groupLabel || '', targets.length,
       ok ? 'OK' : 'エラー: ' + errors.join(' / '), text, names.join('、'),
     ]);
+    if (ok) {
+      // 個人単位の配信履歴（ステージの「反応待ち」判定に使う）
+      try { Stage.recordSends(targets, byId, groupLabel); } catch (e) {
+        Logger.log('[FollowUp] recordSends failed (ignored): ' + e.message);
+      }
+    }
     if (!ok) throw new Error('送信でエラーが発生しました: ' + errors.join(' / '));
     return { sent: targets.length, names: names };
   }
@@ -155,12 +199,13 @@ const FollowUp = (() => {
     return { pinSet: true, trigger: '毎日6〜7時に updateLineUserSummary を実行' };
   }
 
-  return { getList: getList, send: send, setup: setup };
+  return { getList: getList, send: send, setup: setup, setStage: setStage };
 })();
 
 // --- スマホ用ページ(?page=line)の google.script.run から呼ばれる ---
 function lineConsoleGetList(pin, group) { return FollowUp.getList(pin, group); }
 function lineConsoleSend(text, pin, userIds, groupLabel) { return FollowUp.send(text, pin, userIds, groupLabel); }
+function lineConsoleSetStage(pin, userId, name, stage, memo) { return FollowUp.setStage(pin, userId, name, stage, memo); }
 
 /** GASエディタから手動セットアップする用（'ここにPIN' を書き換えて実行） */
 function setupLineDailyFromEditor() {
