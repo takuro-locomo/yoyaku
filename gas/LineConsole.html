@@ -7,21 +7,24 @@
   h1 { font-size: 18px; margin: 4px 0 14px; }
   .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
   label { font-size: 13px; font-weight: bold; color: #374151; }
-  input, textarea, button { font-size: 16px; }
-  input[type=password], textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; margin-top: 4px; }
+  input, textarea, button, select { font-size: 16px; }
+  input[type=password], textarea, select { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; margin-top: 4px; background: #fff; }
   textarea { min-height: 140px; }
   button { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: #06c755; color: #fff; font-weight: bold; margin-top: 8px; }
   button.gray { background: #6b7280; }
+  button.mini { width: auto; padding: 6px 12px; font-size: 13px; margin-right: 8px; background: #e5e7eb; color: #374151; }
   button:disabled { opacity: .5; }
-  ul { padding-left: 18px; margin: 8px 0; }
-  li { margin-bottom: 4px; font-size: 14px; }
+  .member { display: flex; align-items: center; gap: 8px; padding: 7px 2px; border-bottom: 1px solid #f0f1f3; font-size: 14px; }
+  .member input[type=checkbox] { width: 20px; height: 20px; flex: none; }
+  .member .sub { color: #6b7280; font-size: 12px; }
   .note { font-size: 12px; color: #6b7280; }
   .err { color: #dc2626; font-size: 14px; white-space: pre-wrap; }
   .ok { color: #059669; font-size: 14px; white-space: pre-wrap; }
+  .count { font-size: 14px; margin: 8px 0 4px; }
 </style>
 </head>
 <body>
-  <h1>LINE追いかけ配信（上野医院）</h1>
+  <h1>LINE配信（上野医院）</h1>
 
   <div class="card">
     <label>PIN（暗証番号）</label>
@@ -29,71 +32,117 @@
   </div>
 
   <div class="card">
-    <button class="gray" id="btnList" onclick="loadList()">① 追いかけ対象リストを更新して表示</button>
-    <div id="list"></div>
+    <label>グループを選ぶ</label>
+    <select id="group">
+      <option value="followup">追いかけ対象（予約ボタン→未返信）</option>
+      <option value="top50">アクティブ上位50人</option>
+      <option value="top100">アクティブ上位100人</option>
+      <option value="top150">アクティブ上位150人</option>
+    </select>
+    <button class="gray" id="btnList" onclick="loadList()">① リストを更新して表示</button>
+    <div id="listArea">
+      <div class="count" id="countLine"></div>
+      <div id="selBtns" style="display:none">
+        <button class="mini" onclick="setAll(true)">全選択</button>
+        <button class="mini" onclick="setAll(false)">全解除</button>
+      </div>
+      <div id="list"></div>
+    </div>
   </div>
 
   <div class="card">
     <label>送るメッセージ</label>
-    <textarea id="msg" placeholder="例）先日は予約ボタンを押していただきありがとうございます。ご希望の日時がお決まりでしたら、このトークにご返信ください😊"></textarea>
-    <button id="btnSend" onclick="doSend()" disabled>② 上のリスト全員に送信</button>
-    <p class="note">※ 先に①でリストを確認してから送信できます。無料プランは月200通まで（人数分を消費）。送信内容は「配信ログ」シートに記録されます。</p>
+    <textarea id="msg" placeholder="例）いつもありがとうございます。ただいま◯◯キャンペーン中です。ご希望の方はこのトークにご返信ください😊"></textarea>
+    <button id="btnSend" onclick="doSend()" disabled>② チェックした人に送信</button>
+    <p class="note">※ チェックを外した人には送りません（月200通の節約に）。送信内容は「配信ログ」シートに記録されます。<br>
+    ※ 母数はLINE行動ログ(7/2開始)に記録された人のみ。50/100/150人グループは記録が貯まるほど増えます。</p>
     <div id="result"></div>
   </div>
 
 <script>
-  var lastCount = 0;
+  var users = [];
   var pinEl = document.getElementById('pin');
   pinEl.value = localStorage.getItem('linePin') || '';
 
   function pin() { localStorage.setItem('linePin', pinEl.value); return pinEl.value; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function checked() {
+    return users.filter(function (u, i) {
+      var el = document.getElementById('cb_' + i);
+      return el && el.checked;
+    });
+  }
+  function updateSendBtn() {
+    var n = checked().length;
+    var btn = document.getElementById('btnSend');
+    btn.disabled = (n === 0);
+    btn.textContent = n ? ('② チェックした ' + n + '人 に送信') : '② チェックした人に送信';
+  }
+  function setAll(v) {
+    users.forEach(function (_, i) {
+      var el = document.getElementById('cb_' + i);
+      if (el) el.checked = v;
+    });
+    updateSendBtn();
+  }
 
   function loadList() {
     var el = document.getElementById('list');
+    document.getElementById('countLine').textContent = '';
+    document.getElementById('selBtns').style.display = 'none';
     el.innerHTML = '<p class="note">集計中…（10秒ほどかかります）</p>';
     document.getElementById('btnList').disabled = true;
     google.script.run
       .withSuccessHandler(function (r) {
         document.getElementById('btnList').disabled = false;
-        lastCount = r.count;
-        if (!r.count) {
-          el.innerHTML = '<p class="ok">追いかけ対象は現在0人です。</p>';
-          document.getElementById('btnSend').disabled = true;
+        users = r.users || [];
+        document.getElementById('countLine').innerHTML =
+          '<b>' + r.count + '人</b>（' + esc(r.groupLabel) + '）／ログに記録済み: ' + r.totalLogged + '人';
+        if (!users.length) {
+          el.innerHTML = '<p class="ok">このグループは現在0人です。</p>';
+          updateSendBtn();
           return;
         }
-        var html = '<p><b>' + r.count + '人</b>（予約ボタンを押したがフォーム未返信）</p><ul>';
-        r.users.forEach(function (u) {
-          html += '<li>' + esc(u.name) + '（最終: ' + esc(u.lastActive) + '／予約ボタン' + u.reserveClicks + '回）</li>';
+        var html = '';
+        users.forEach(function (u, i) {
+          var sub = '最終: ' + esc(u.lastActive)
+            + (u.level ? '／' + esc(u.level) : '')
+            + (u.interest ? '／興味: ' + esc(u.interest) : '')
+            + (u.star ? '／★追いかけ' : '');
+          html += '<div class="member"><input type="checkbox" id="cb_' + i + '" checked onchange="updateSendBtn()">'
+            + '<div><div>' + esc(u.name) + '</div><div class="sub">' + sub + '</div></div></div>';
         });
-        el.innerHTML = html + '</ul>';
-        document.getElementById('btnSend').disabled = false;
+        el.innerHTML = html;
+        document.getElementById('selBtns').style.display = 'block';
+        updateSendBtn();
       })
       .withFailureHandler(function (e) {
         document.getElementById('btnList').disabled = false;
         el.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
       })
-      .lineConsoleGetList(pin());
+      .lineConsoleGetList(pin(), document.getElementById('group').value);
   }
 
   function doSend() {
     var msg = document.getElementById('msg').value.trim();
     var res = document.getElementById('result');
+    var sel = checked();
     if (!msg) { res.innerHTML = '<p class="err">メッセージを入力してください。</p>'; return; }
-    if (!confirm(lastCount + '人に送信します。よろしいですか？\n（月200通の枠を' + lastCount + '通消費します）')) return;
+    if (!sel.length) { res.innerHTML = '<p class="err">送信先にチェックを入れてください。</p>'; return; }
+    if (!confirm(sel.length + '人に送信します。よろしいですか？\n（月200通の枠を' + sel.length + '通消費します）')) return;
     document.getElementById('btnSend').disabled = true;
     res.innerHTML = '<p class="note">送信中…</p>';
+    var groupLabel = document.getElementById('group').selectedOptions[0].textContent;
     google.script.run
       .withSuccessHandler(function (r) {
-        document.getElementById('btnSend').disabled = false;
-        if (!r.sent) { res.innerHTML = '<p class="err">' + esc(r.message || '送信対象がいませんでした。') + '</p>'; return; }
+        updateSendBtn();
         res.innerHTML = '<p class="ok">送信しました（' + r.sent + '人）:\n' + esc((r.names || []).join('、')) + '</p>';
       })
       .withFailureHandler(function (e) {
-        document.getElementById('btnSend').disabled = false;
+        updateSendBtn();
         res.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
       })
-      .lineConsoleSend(msg, pin());
+      .lineConsoleSend(msg, pin(), sel.map(function (u) { return u.userId; }), groupLabel);
   }
 </script>
 </body>
