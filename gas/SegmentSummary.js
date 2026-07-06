@@ -82,8 +82,15 @@ const SegmentSummary = (() => {
         if (n > maxN) { maxN = n; maxBtn = b.replace('ボタン:', ''); }
       });
 
-      // 追いかけ対象: 予約ボタンは押したがCVなし・ブロックでもない
-      var followUp = (!u.blocked && u.cv === 0 && (u.buttons['ボタン:予約'] || 0) > 0) ? '★' : '';
+      // 追いかけ対象: 一度も予約していない(CV=0)が、予約以外のページも
+      // 見て回ったうえで予約ボタンを押した人（ブロック除く）。
+      // OTHER_KINDS_MIN = 予約以外に何種類のボタンを押していれば「見て回った」とするか
+      var OTHER_KINDS_MIN = 2;
+      var otherKinds = BUTTON_COLS.filter(function (b) {
+        return b !== 'ボタン:予約' && (u.buttons[b] || 0) > 0;
+      }).length;
+      var followUp = (!u.blocked && u.cv === 0 &&
+        (u.buttons['ボタン:予約'] || 0) > 0 && otherKinds >= OTHER_KINDS_MIN) ? '★' : '';
 
       return [
         id, u.name, u.first, u.last, u.total,

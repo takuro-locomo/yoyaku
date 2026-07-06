@@ -22,7 +22,7 @@ const FollowUp = (() => {
   };
 
   const GROUPS = {
-    followup: { label: '追いかけ対象（予約ボタン→未返信）' },
+    followup: { label: '追いかけ対象（色々見て予約ボタン→未予約）' },
     top50:    { label: 'アクティブ上位50人',  n: 50 },
     top100:   { label: 'アクティブ上位100人', n: 100 },
     top150:   { label: 'アクティブ上位150人', n: 150 },
