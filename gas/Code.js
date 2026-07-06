@@ -82,6 +82,10 @@ function _route(action, params) {
     case 'getPatientReservations':
       return _buildResponse({ success: true, data: Reservation.getByPatientId(params.patientId) });
 
+    // --- LINE行動ログ: セグメント集計 ---
+    case 'updateLineSegments':
+      return _buildResponse({ success: true, data: SegmentSummary.update() });
+
     // --- マスタ一括取得 (管理画面用) ---
     case 'getMasters':
       return _buildResponse({ success: true, data: _getMasters() });
