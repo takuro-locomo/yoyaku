@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  body { font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif; margin: 0; padding: 16px; background: #f6f7f9; color: #1f2937; }
+  h1 { font-size: 18px; margin: 4px 0 14px; }
+  .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  label { font-size: 13px; font-weight: bold; color: #374151; }
+  input, textarea, button { font-size: 16px; }
+  input[type=password], textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; margin-top: 4px; }
+  textarea { min-height: 140px; }
+  button { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: #06c755; color: #fff; font-weight: bold; margin-top: 8px; }
+  button.gray { background: #6b7280; }
+  button:disabled { opacity: .5; }
+  ul { padding-left: 18px; margin: 8px 0; }
+  li { margin-bottom: 4px; font-size: 14px; }
+  .note { font-size: 12px; color: #6b7280; }
+  .err { color: #dc2626; font-size: 14px; white-space: pre-wrap; }
+  .ok { color: #059669; font-size: 14px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <h1>LINE追いかけ配信（上野医院）</h1>
+
+  <div class="card">
+    <label>PIN（暗証番号）</label>
+    <input type="password" id="pin" inputmode="numeric" placeholder="PINを入力">
+  </div>
+
+  <div class="card">
+    <button class="gray" id="btnList" onclick="loadList()">① 追いかけ対象リストを更新して表示</button>
+    <div id="list"></div>
+  </div>
+
+  <div class="card">
+    <label>送るメッセージ</label>
+    <textarea id="msg" placeholder="例）先日は予約ボタンを押していただきありがとうございます。ご希望の日時がお決まりでしたら、このトークにご返信ください😊"></textarea>
+    <button id="btnSend" onclick="doSend()" disabled>② 上のリスト全員に送信</button>
+    <p class="note">※ 先に①でリストを確認してから送信できます。無料プランは月200通まで（人数分を消費）。送信内容は「配信ログ」シートに記録されます。</p>
+    <div id="result"></div>
+  </div>
+
+<script>
+  var lastCount = 0;
+  var pinEl = document.getElementById('pin');
+  pinEl.value = localStorage.getItem('linePin') || '';
+
+  function pin() { localStorage.setItem('linePin', pinEl.value); return pinEl.value; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  function loadList() {
+    var el = document.getElementById('list');
+    el.innerHTML = '<p class="note">集計中…（10秒ほどかかります）</p>';
+    document.getElementById('btnList').disabled = true;
+    google.script.run
+      .withSuccessHandler(function (r) {
+        document.getElementById('btnList').disabled = false;
+        lastCount = r.count;
+        if (!r.count) {
+          el.innerHTML = '<p class="ok">追いかけ対象は現在0人です。</p>';
+          document.getElementById('btnSend').disabled = true;
+          return;
+        }
+        var html = '<p><b>' + r.count + '人</b>（予約ボタンを押したがフォーム未返信）</p><ul>';
+        r.users.forEach(function (u) {
+          html += '<li>' + esc(u.name) + '（最終: ' + esc(u.lastActive) + '／予約ボタン' + u.reserveClicks + '回）</li>';
+        });
+        el.innerHTML = html + '</ul>';
+        document.getElementById('btnSend').disabled = false;
+      })
+      .withFailureHandler(function (e) {
+        document.getElementById('btnList').disabled = false;
+        el.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
+      })
+      .lineConsoleGetList(pin());
+  }
+
+  function doSend() {
+    var msg = document.getElementById('msg').value.trim();
+    var res = document.getElementById('result');
+    if (!msg) { res.innerHTML = '<p class="err">メッセージを入力してください。</p>'; return; }
+    if (!confirm(lastCount + '人に送信します。よろしいですか？\n（月200通の枠を' + lastCount + '通消費します）')) return;
+    document.getElementById('btnSend').disabled = true;
+    res.innerHTML = '<p class="note">送信中…</p>';
+    google.script.run
+      .withSuccessHandler(function (r) {
+        document.getElementById('btnSend').disabled = false;
+        if (!r.sent) { res.innerHTML = '<p class="err">' + esc(r.message || '送信対象がいませんでした。') + '</p>'; return; }
+        res.innerHTML = '<p class="ok">送信しました（' + r.sent + '人）:\n' + esc((r.names || []).join('、')) + '</p>';
+      })
+      .withFailureHandler(function (e) {
+        document.getElementById('btnSend').disabled = false;
+        res.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
+      })
+      .lineConsoleSend(msg, pin());
+  }
+</script>
+</body>
+</html>

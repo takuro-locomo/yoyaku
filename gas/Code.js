@@ -28,6 +28,12 @@ function doPost(e) {
 
 function doGet(e) {
   try {
+    // スマホ用: LINE追いかけ配信ページ
+    if (e.parameter.page === 'line') {
+      return HtmlService.createHtmlOutputFromFile('LineConsole')
+        .setTitle('LINE追いかけ配信')
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    }
     const action = e.parameter.action;
     return _route(action, e.parameter);
   } catch (err) {
@@ -85,6 +91,16 @@ function _route(action, params) {
     // --- LINE行動ログ: セグメント集計 ---
     case 'updateLineSegments':
       return _buildResponse({ success: true, data: SegmentSummary.update() });
+
+    // --- LINE追いかけ配信 (PIN必須) ---
+    case 'getLineFollowUpList':
+      return _buildResponse({ success: true, data: FollowUp.getList(params.pin) });
+
+    case 'sendLineFollowUp':
+      return _buildResponse({ success: true, data: FollowUp.send(params.text, params.pin) });
+
+    case 'setupLineDaily':
+      return _buildResponse({ success: true, data: FollowUp.setup(params.pin) });
 
     // --- マスタ一括取得 (管理画面用) ---
     case 'getMasters':
