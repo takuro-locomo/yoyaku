@@ -20,7 +20,7 @@ const Stage = (() => {
   const SHEET_SENDHIST = '配信先履歴';
 
   const STAGES = ['新規', '反応待ち', '反応あり', '予約済み', '休眠', '対象外'];
-  const DORMANT_DAYS = 60;   // この日数反応がなければ「休眠」
+  const DORMANT_DAYS = 90;   // この日数反応がなければ「休眠」（予約済みでも落とす＝リピート再アプローチ対象）
 
   function _ss() {
     var id = PropertiesService.getScriptProperties().getProperty('LINE_ACTIVITY_LOG_SSID');
@@ -90,9 +90,11 @@ const Stage = (() => {
   function compute(u, manualStage, lastSendAt, now) {
     if (manualStage) return manualStage;
     if (u.blocked) return '対象外';
-    if (u.cv > 0) return '予約済み';
+    // 休眠はCVより先に判定する: 予約済みでも90日反応がなければ休眠に落とし、
+    // リピート促進の再アプローチ対象にする（クリニックはリピートが生命線）
     var dormantLimit = new Date(now.getTime() - DORMANT_DAYS * 24 * 60 * 60 * 1000);
     if (u.last < dormantLimit) return '休眠';
+    if (u.cv > 0) return '予約済み';
     if (lastSendAt && lastSendAt > u.last) return '反応待ち';
     if (u.reactions > 0) return '反応あり';
     return '新規';
@@ -102,7 +104,10 @@ const Stage = (() => {
   // 書き込み
   // -------------------------------------------------------------------------
 
-  /** 手動ステージを設定。stage='（自動）'または空で解除（自動判定に戻す） */
+  /**
+   * 手動ステージを設定。stage='（自動）'または空で解除（自動判定に戻す）。
+   * memoがnull/undefinedのときは既存メモを保持する（UIからのステージ変更でメモを消さない）。
+   */
   function setManual(userId, name, stage, memo) {
     if (!userId) throw new Error('userIdがありません。');
     stage = String(stage || '').trim();
@@ -114,14 +119,19 @@ const Stage = (() => {
     var lock = LockService.getScriptLock();
     lock.waitLock(10000);
     try {
-      var rowIndex = 0;
+      var rowIndex = 0, existingMemo = '';
       if (sheet.getLastRow() >= 2) {
-        var ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-        for (var i = 0; i < ids.length; i++) {
-          if (ids[i][0] === userId) { rowIndex = i + 2; break; }
+        var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
+        for (var i = 0; i < rows.length; i++) {
+          if (rows[i][0] === userId) {
+            rowIndex = i + 2;
+            existingMemo = String(rows[i][3] || '');
+            break;
+          }
         }
       }
-      var row = [userId, name || '', isAuto ? '' : stage, memo || '', new Date()];
+      var newMemo = (memo == null) ? existingMemo : String(memo);
+      var row = [userId, name || '', isAuto ? '' : stage, newMemo, new Date()];
       if (rowIndex) {
         sheet.getRange(rowIndex, 1, 1, 5).setValues([row]);
       } else if (!isAuto) {

@@ -25,7 +25,7 @@ const SegmentSummary = (() => {
     '予約', 'キャンペーン', '施術メニュー', 'よくある質問', 'アクセス', 'HP',
     '自由入力', 'CV回数(フォーム返信)', 'ブロック',
     'アクティブ度', '興味(最多ボタン)', '追いかけ対象(予約ボタン→CVなし)',
-    'ステージ', '最終配信', 'ステージメモ',
+    'ステージ', '最終配信', 'ステージメモ', 'ステージ手動',
   ];
 
   function update() {
@@ -109,19 +109,26 @@ const SegmentSummary = (() => {
       ].concat(btnCounts).concat([
         u.free, u.cv, u.blocked ? 1 : '',
         level, maxBtn, followUp,
-        stage, lastSend || '', manual ? manual.memo : '',
+        stage, lastSend || '', manual ? manual.memo : '', manual ? 1 : '',
       ]);
     });
 
     // 最終アクティブの新しい順
     out.sort(function (a, b) { return b[3] - a[3]; });
 
-    var sheet = ss.getSheetByName(SHEET_SUMMARY) || ss.insertSheet(SHEET_SUMMARY);
-    sheet.clearContents();
-    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
-    sheet.setFrozenRows(1);
-    if (out.length) {
-      sheet.getRange(2, 1, out.length, HEADERS.length).setValues(out);
+    // 同時アクセスで書きかけのシートが読まれないようロックして書き込む
+    var lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    try {
+      var sheet = ss.getSheetByName(SHEET_SUMMARY) || ss.insertSheet(SHEET_SUMMARY);
+      sheet.clearContents();
+      sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
+      sheet.setFrozenRows(1);
+      if (out.length) {
+        sheet.getRange(2, 1, out.length, HEADERS.length).setValues(out);
+      }
+    } finally {
+      lock.releaseLock();
     }
     return { users: out.length, updatedAt: now.toISOString() };
   }

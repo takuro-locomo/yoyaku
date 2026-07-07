@@ -49,7 +49,8 @@
   <div class="card">
     <label>ステージボード（タップでそのステージの一覧を表示）</label>
     <div class="board" id="board"></div>
-    <p class="note">新規=まだ反応なし／反応待ち=配信後まだ反応なし／反応あり=ボタン等の反応あり(未予約)／予約済み=予約フォーム返信あり／休眠=60日以上反応なし／対象外=ブロック・手動除外</p>
+    <p class="note">新規=まだ反応なし／反応待ち=配信後まだ反応なし／反応あり=ボタン等の反応あり(未予約)／予約済み=予約フォーム返信あり／休眠=90日以上反応なし(予約済みでも落ちる=リピート再アプローチ対象)／対象外=ブロック・手動除外<br>
+    ステージは毎回自動判定されます。手動で変更した人には ✋ が付き、（自動）に戻すまで固定されます。</p>
   </div>
 
   <div class="card">
@@ -140,11 +141,12 @@
     loadList();
   }
 
-  function stageSelHtml(i, current) {
+  function stageSelHtml(i, u) {
+    // 手動上書き中はそのステージを、自動判定中は「（自動）」を選択状態にする
     var html = '<select class="stageSel" id="st_' + i + '" onchange="changeStage(' + i + ')">';
-    html += '<option value="（自動）">（自動）</option>';
+    html += '<option value="（自動）"' + (u.stageManual ? '' : ' selected') + '>（自動）</option>';
     stages.forEach(function (s) {
-      html += '<option value="' + s + '"' + (s === current ? ' selected' : '') + '>' + s + '</option>';
+      html += '<option value="' + s + '"' + (u.stageManual && s === u.stage ? ' selected' : '') + '>' + s + '</option>';
     });
     return html + '</select>';
   }
@@ -154,24 +156,30 @@
     var sel = document.getElementById('st_' + i);
     var newStage = sel.value;
     var label = (newStage === '（自動）') ? '自動判定に戻す' : '「' + newStage + '」に変更';
+    var revert = u.stageManual ? u.stage : '（自動）';
     if (!confirm(u.name + ' さんのステージを' + label + '。よろしいですか？')) {
-      sel.value = u.stage || '（自動）';
+      sel.value = revert;
       return;
     }
     sel.disabled = true;
     google.script.run
       .withSuccessHandler(function (r) {
         sel.disabled = false;
-        u.stage = (r.stage === '（自動）') ? u.stage : r.stage;
+        if (r.stage === '（自動）') {
+          u.stageManual = false;
+        } else {
+          u.stageManual = true;
+          u.stage = r.stage;
+        }
         document.getElementById('result').innerHTML =
           '<p class="ok">' + esc(u.name) + ' さんを「' + esc(r.stage) + '」にしました。リストを更新すると反映されます。</p>';
       })
       .withFailureHandler(function (e) {
         sel.disabled = false;
-        sel.value = u.stage || '（自動）';
+        sel.value = revert;
         document.getElementById('result').innerHTML = '<p class="err">' + esc(e.message) + '</p>';
       })
-      .lineConsoleSetStage(pin(), u.userId, u.name, newStage, '');
+      .lineConsoleSetStage(pin(), u.userId, u.name, newStage, null);
   }
 
   function loadList() {
@@ -201,9 +209,9 @@
             + (u.star ? '／★追いかけ' : '');
           html += '<div class="member"><input type="checkbox" id="cb_' + i + '"' + defaultChecked + ' onchange="updateSendBtn()">'
             + '<div class="body"><div>' + esc(u.name)
-            + ' <span class="badge st-' + esc(u.stage) + '">' + esc(u.stage) + '</span></div>'
+            + ' <span class="badge st-' + esc(u.stage) + '">' + (u.stageManual ? '✋' : '') + esc(u.stage) + '</span></div>'
             + '<div class="sub">' + sub + '</div></div>'
-            + stageSelHtml(i, u.stage) + '</div>';
+            + stageSelHtml(i, u) + '</div>';
         });
         el.innerHTML = html;
         document.getElementById('selBtns').style.display = 'block';

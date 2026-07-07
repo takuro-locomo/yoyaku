@@ -19,16 +19,16 @@ const FollowUp = (() => {
   const COL = {
     userId: 0, name: 1, last: 3, total: 4, reserveBtn: 5,
     cv: 12, blocked: 13, level: 14, interest: 15, followUp: 16,
-    stage: 17, lastSend: 18, stageMemo: 19,
+    stage: 17, lastSend: 18, stageMemo: 19, stageManual: 20,
   };
-  const NUM_COLS = 20;
+  const NUM_COLS = 21;
 
   const GROUPS = {
     followup: { label: '追いかけ対象（色々見て予約ボタン→未予約）' },
     top50:    { label: 'アクティブ上位50人',  n: 50 },
     top100:   { label: 'アクティブ上位100人', n: 100 },
     top150:   { label: 'アクティブ上位150人', n: 150 },
-    // ステージ別（'stage:新規' のように指定してもよい）
+    // ステージ別
     stage_new:       { label: 'ステージ: 新規',     stage: '新規' },
     stage_untouched: { label: 'ステージ: 反応待ち', stage: '反応待ち' },
     stage_connected: { label: 'ステージ: 反応あり', stage: '反応あり' },
@@ -75,6 +75,7 @@ const FollowUp = (() => {
       stage: r[COL.stage] || '',
       lastSend: _fmt(r[COL.lastSend]),
       stageMemo: r[COL.stageMemo] || '',
+      stageManual: r[COL.stageManual] === 1,
     };
   }
 
