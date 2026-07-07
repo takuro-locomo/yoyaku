@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  body { font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif; margin: 0; padding: 16px; background: #f6f7f9; color: #1f2937; }
+  h1 { font-size: 18px; margin: 4px 0 4px; }
+  .navlink { font-size: 13px; margin-bottom: 12px; }
+  .navlink a { color: #2563eb; text-decoration: none; }
+  .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  label { font-size: 13px; font-weight: bold; color: #374151; }
+  input, button { font-size: 16px; }
+  input[type=password] { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; margin-top: 4px; background: #fff; }
+  button { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: #06c755; color: #fff; font-weight: bold; margin-top: 8px; }
+  button:disabled { opacity: .5; }
+  .note { font-size: 12px; color: #6b7280; }
+  .err { color: #dc2626; font-size: 14px; white-space: pre-wrap; }
+  /* KPIタイル */
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
+  .tile { background: #f9fafb; border-radius: 10px; padding: 10px; }
+  .tile .k { font-size: 12px; color: #6b7280; }
+  .tile .v { font-size: 24px; font-weight: bold; font-variant-numeric: tabular-nums; }
+  .tile .d { font-size: 12px; font-variant-numeric: tabular-nums; }
+  .d.good { color: #059669; }
+  .d.bad { color: #dc2626; }
+  .d.flat { color: #9ca3af; }
+  /* 棒グラフ（単一系列・CSSのみ） */
+  .chartTitle { font-size: 12px; color: #374151; font-weight: bold; margin: 12px 0 4px; display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .chart { display: flex; align-items: flex-end; gap: 2px; height: 96px; padding-top: 14px; }
+  .bcol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; min-width: 0; position: relative; }
+  .bar { width: 100%; max-width: 26px; border-radius: 4px 4px 0 0; min-height: 2px; }
+  .bar.green { background: #06c755; }
+  .bar.purple { background: #7c3aed; }
+  .bar.zero { background: #e5e7eb; }
+  .blab { position: absolute; top: -14px; font-size: 10px; color: #374151; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .xrow { display: flex; gap: 2px; margin-top: 3px; }
+  .xlab { flex: 1; text-align: center; font-size: 9px; color: #9ca3af; overflow: hidden; white-space: nowrap; }
+  /* テーブル */
+  .twrap { overflow-x: auto; margin-top: 8px; }
+  table { border-collapse: collapse; font-size: 12px; width: 100%; min-width: 360px; }
+  th, td { padding: 5px 7px; text-align: right; border-bottom: 1px solid #f0f1f3; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th { color: #6b7280; font-weight: normal; }
+  th:first-child, td:first-child { text-align: left; }
+  tr.now td { font-weight: bold; background: #f9fafb; }
+  /* ステージ分布 */
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .chip { border-radius: 10px; padding: 8px 4px; text-align: center; background: #f3f4f6; }
+  .chip .n { font-size: 20px; font-weight: bold; font-variant-numeric: tabular-nums; }
+  .chip .s { font-size: 11px; }
+  .st-新規 { background: #dbeafe; color: #1d4ed8; }
+  .st-反応待ち { background: #fef3c7; color: #b45309; }
+  .st-反応あり { background: #dcfce7; color: #15803d; }
+  .st-予約済み { background: #ede9fe; color: #6d28d9; }
+  .st-休眠 { background: #e5e7eb; color: #4b5563; }
+  .st-対象外 { background: #fee2e2; color: #b91c1c; }
+</style>
+</head>
+<body>
+  <h1>LINE KPIレポート（上野医院）</h1>
+  <div class="navlink"><a href="<?= baseUrl ?>?page=line">← 配信・ステージ管理へ</a></div>
+
+  <div class="card">
+    <label>PIN（暗証番号）</label>
+    <input type="password" id="pin" inputmode="numeric" placeholder="PINを入力">
+    <button id="btnLoad" onclick="loadReport()">レポートを表示</button>
+    <div id="err"></div>
+  </div>
+
+  <div id="report" style="display:none">
+
+    <div class="card">
+      <label id="weekLabel">今週</label>
+      <div class="tiles" id="weekTiles"></div>
+      <p class="note">（ ）内は先週との差。ブロックだけは増えると赤になります。</p>
+    </div>
+
+    <div class="card">
+      <label id="monthLabel">今月</label>
+      <div class="tiles" id="monthTiles"></div>
+      <p class="note">（ ）内は先月との差。</p>
+    </div>
+
+    <div class="card">
+      <label>週次推移（直近8週）</label>
+      <div class="chartTitle"><span class="swatch" style="background:#06c755"></span>反応した人数</div>
+      <div class="chart" id="chartActive"></div>
+      <div class="xrow" id="xActive"></div>
+      <div class="chartTitle"><span class="swatch" style="background:#7c3aed"></span>予約フォーム返信（CV）</div>
+      <div class="chart" id="chartCv"></div>
+      <div class="xrow" id="xCv"></div>
+      <div class="twrap">
+        <table id="weekTable"></table>
+      </div>
+      <p class="note" id="logStartNote"></p>
+    </div>
+
+    <div class="card">
+      <label>月次（直近6ヶ月）</label>
+      <div class="twrap">
+        <table id="monthTable"></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>いまの状態</label>
+      <div class="board" id="stageBoard"></div>
+      <p class="note" id="extraNote" style="margin-top:10px"></p>
+    </div>
+
+  </div>
+
+<script>
+  var pinEl = document.getElementById('pin');
+  pinEl.value = localStorage.getItem('linePin') || '';
+  function pin() { localStorage.setItem('linePin', pinEl.value); return pinEl.value; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  // 差分表示: upGood=増えたら良い指標か（ブロックはfalse）
+  function delta(cur, prev, upGood) {
+    var d = cur - prev;
+    if (d === 0) return '<span class="d flat">（±0）</span>';
+    var sign = d > 0 ? '+' : '';
+    var cls = (d > 0) === upGood ? 'good' : 'bad';
+    return '<span class="d ' + cls + '">（' + sign + d + '）</span>';
+  }
+
+  function tiles(elId, cur, prev) {
+    var defs = [
+      { k: '新規友だち', v: cur.nf, p: prev.nf, upGood: true },
+      { k: '反応した人', v: cur.active, p: prev.active, upGood: true },
+      { k: '予約（CV）', v: cur.cv, p: prev.cv, upGood: true },
+      { k: 'ブロック', v: cur.blocks, p: prev.blocks, upGood: false },
+    ];
+    document.getElementById(elId).innerHTML = defs.map(function (t) {
+      return '<div class="tile"><div class="k">' + t.k + '</div>'
+        + '<div class="v">' + t.v + '</div>' + delta(t.v, t.p, t.upGood) + '</div>';
+    }).join('');
+  }
+
+  // 単一系列の棒グラフ。値ラベルは最大の週と今週だけ（見やすさ優先）
+  function barChart(chartId, xId, series, colorCls) {
+    var max = 0, maxIdx = 0;
+    series.forEach(function (s, i) { if (s.v > max) { max = s.v; maxIdx = i; } });
+    var bars = '', labs = '';
+    series.forEach(function (s, i) {
+      var h = max > 0 ? Math.max(2, Math.round(s.v / max * 80)) : 2;
+      var showLab = (i === maxIdx && s.v > 0) || i === series.length - 1;
+      bars += '<div class="bcol" title="' + esc(s.label) + '週: ' + s.v + '">'
+        + (showLab ? '<div class="blab">' + s.v + '</div>' : '')
+        + '<div class="bar ' + (s.v > 0 ? colorCls : 'zero') + '" style="height:' + h + 'px"></div></div>';
+      labs += '<div class="xlab">' + (i % 2 === 1 ? esc(s.label) : '') + '</div>';
+    });
+    document.getElementById(chartId).innerHTML = bars;
+    document.getElementById(xId).innerHTML = labs;
+  }
+
+  function table(elId, rows, labelHead) {
+    var html = '<tr><th>' + labelHead + '</th><th>新規</th><th>反応</th><th>予約</th><th>ブロック</th><th>配信</th></tr>';
+    rows.forEach(function (r, i) {
+      var now = (i === rows.length - 1) ? ' class="now"' : '';
+      html += '<tr' + now + '><td>' + esc(r.label) + '</td><td>' + r.nf + '</td><td>' + r.active
+        + '</td><td>' + r.cv + '</td><td>' + r.blocks + '</td><td>'
+        + (r.sends ? r.sends + '回/' + r.sentN + '通' : '-') + '</td></tr>';
+    });
+    document.getElementById(elId).innerHTML = html;
+  }
+
+  function loadReport() {
+    var errEl = document.getElementById('err');
+    errEl.innerHTML = '<p class="note">集計中…（10秒ほどかかります）</p>';
+    document.getElementById('btnLoad').disabled = true;
+    google.script.run
+      .withSuccessHandler(function (r) {
+        document.getElementById('btnLoad').disabled = false;
+        errEl.innerHTML = '';
+        document.getElementById('report').style.display = 'block';
+
+        var w = r.weekly, m = r.monthly;
+        var curW = w[w.length - 1], prevW = w[w.length - 2];
+        var curM = m[m.length - 1], prevM = m[m.length - 2];
+        document.getElementById('weekLabel').textContent = '今週（' + curW.label + '〜）';
+        document.getElementById('monthLabel').textContent = '今月（' + curM.label + '）';
+        tiles('weekTiles', curW, prevW);
+        tiles('monthTiles', curM, prevM);
+
+        barChart('chartActive', 'xActive',
+          w.map(function (x) { return { label: x.label, v: x.active }; }), 'green');
+        barChart('chartCv', 'xCv',
+          w.map(function (x) { return { label: x.label, v: x.cv }; }), 'purple');
+        table('weekTable', w, '週');
+        table('monthTable', m, '月');
+        document.getElementById('logStartNote').textContent =
+          '※ 記録は' + (r.logStart || '2026-07-02') + '開始。それ以前の週・月は0になります。';
+
+        var stages = ['新規', '反応待ち', '反応あり', '予約済み', '休眠', '対象外'];
+        document.getElementById('stageBoard').innerHTML = stages.map(function (s) {
+          var n = (r.stages && r.stages[s]) || 0;
+          return '<div class="chip st-' + s + '"><div class="n">' + n + '</div><div class="s">' + s + '</div></div>';
+        }).join('');
+
+        var extra = [];
+        if (r.quota && r.quota.limit != null) {
+          extra.push('今月の配信: ' + r.quota.used + '/' + r.quota.limit + '通（残り ' + r.quota.remaining + '通）');
+        }
+        extra.push('そろそろ来院時期の人: ' + (r.dueCount || 0) + '人');
+        if (r.bestTime) extra.push(r.bestTime);
+        document.getElementById('extraNote').innerHTML = extra.map(esc).join('<br>');
+      })
+      .withFailureHandler(function (e) {
+        document.getElementById('btnLoad').disabled = false;
+        errEl.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
+      })
+      .lineConsoleGetReport(pin());
+  }
+</script>
+</body>
+</html>

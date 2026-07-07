@@ -239,6 +239,103 @@ const Insights = (() => {
   }
 
   // -------------------------------------------------------------------------
+  // ⑤ KPIレポート（?page=report 用）: 週次8週＋月次6ヶ月
+  // -------------------------------------------------------------------------
+
+  /**
+   * 週次(直近8週・月曜始まり)と月次(直近6ヶ月)のKPI。
+   * 各バケット: {label, nf(新規), active(反応した人数), cv, blocks, sends(配信回数), sentN(配信通数)}
+   */
+  function kpi() {
+    var now = new Date();
+
+    function weekStart(d) {
+      var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      x.setDate(x.getDate() - (x.getDay() + 6) % 7);   // 月曜へ
+      return x;
+    }
+    var w0 = weekStart(now);
+    var weeks = [];
+    for (var i = 7; i >= 0; i--) {
+      var s = new Date(w0);
+      s.setDate(s.getDate() - 7 * i);
+      weeks.push({
+        startMs: s.getTime(), endMs: s.getTime() + 7 * 86400000,
+        label: (s.getMonth() + 1) + '/' + s.getDate(),
+        nf: 0, blocks: 0, cv: 0, activeSet: {}, sends: 0, sentN: 0,
+      });
+    }
+    var months = [];
+    for (var j = 5; j >= 0; j--) {
+      var m = new Date(now.getFullYear(), now.getMonth() - j, 1);
+      months.push({
+        y: m.getFullYear(), m: m.getMonth(), label: (m.getMonth() + 1) + '月',
+        nf: 0, blocks: 0, cv: 0, activeSet: {}, sends: 0, sentN: 0,
+      });
+    }
+    function findWeek(t) {
+      for (var k = weeks.length - 1; k >= 0; k--) {
+        if (t >= weeks[k].startMs && t < weeks[k].endMs) return weeks[k];
+      }
+      return null;
+    }
+    function findMonth(d) {
+      for (var k = 0; k < months.length; k++) {
+        if (months[k].y === d.getFullYear() && months[k].m === d.getMonth()) return months[k];
+      }
+      return null;
+    }
+
+    _logs().forEach(function (l) {
+      var buckets = [findWeek(l.at.getTime()), findMonth(l.at)];
+      buckets.forEach(function (b) {
+        if (!b) return;
+        if (l.category === '友だち追加') b.nf++;
+        else if (l.category === 'ブロック/削除') b.blocks++;
+        else b.activeSet[l.userId] = true;
+        if (l.cv) b.cv++;
+      });
+    });
+
+    // 配信回数・通数（配信ログ）
+    var sl = _ss().getSheetByName('配信ログ');
+    if (sl && sl.getLastRow() >= 2) {
+      sl.getRange(2, 1, sl.getLastRow() - 1, 3).getValues().forEach(function (r) {
+        if (!(r[0] instanceof Date)) return;
+        [findWeek(r[0].getTime()), findMonth(r[0])].forEach(function (b) {
+          if (!b) return;
+          b.sends++;
+          b.sentN += Number(r[2]) || 0;
+        });
+      });
+    }
+
+    // ステージ分布（最終集計時点のサマリーから）
+    var stageCounts = {};
+    var sheet = _ss().getSheetByName('ユーザー別サマリー');
+    if (sheet && sheet.getLastRow() >= 2) {
+      sheet.getRange(2, 18, sheet.getLastRow() - 1, 1).getValues().forEach(function (r) {
+        if (r[0]) stageCounts[r[0]] = (stageCounts[r[0]] || 0) + 1;
+      });
+    }
+
+    function fin(b) {
+      return {
+        label: b.label, nf: b.nf, active: Object.keys(b.activeSet).length,
+        cv: b.cv, blocks: b.blocks, sends: b.sends, sentN: b.sentN,
+      };
+    }
+    return {
+      weekly: weeks.map(fin),     // 古い順・最後が今週
+      monthly: months.map(fin),   // 古い順・最後が今月
+      stages: stageCounts,
+      dueCount: dueList().length,
+      bestTime: heatmap().label,
+      logStart: '2026-07-02',     // 行動ログの記録開始日（それ以前は0になる）
+    };
+  }
+
+  // -------------------------------------------------------------------------
   // シート書き出し＆週次メール（毎朝トリガーから呼ばれる）
   // -------------------------------------------------------------------------
 
@@ -356,6 +453,7 @@ const Insights = (() => {
     heatmap: heatmap,
     dueList: dueList,
     engagementScores: engagementScores,
+    kpi: kpi,
     refreshSheets: refreshSheets,
     emailWeekly: emailWeekly,
     daily: daily,

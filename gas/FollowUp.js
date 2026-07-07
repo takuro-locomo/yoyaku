@@ -238,6 +238,14 @@ const FollowUp = (() => {
     return Templates.save(stage, title, body);
   }
 
+  /** KPIレポート（?page=report 用）: 週次8週＋月次6ヶ月＋残り通数 */
+  function getReport(pin) {
+    _checkPin(pin);
+    var r = Insights.kpi();
+    r.quota = _quota();
+    return r;
+  }
+
   /**
    * 指定したuserIdの人だけに送信（チェックを外した人には送らない）。
    * userIds はサマリーに実在しブロックでない人だけに絞ってから送る。
@@ -316,11 +324,12 @@ const FollowUp = (() => {
     return { pinSet: true, trigger: '毎日6〜7時に updateLineUserSummary を実行' };
   }
 
-  return { getList: getList, send: send, setup: setup, setStage: setStage, saveTemplate: saveTemplate };
+  return { getList: getList, send: send, setup: setup, setStage: setStage, saveTemplate: saveTemplate, getReport: getReport };
 })();
 
-// --- スマホ用ページ(?page=line)の google.script.run から呼ばれる ---
+// --- スマホ用ページ(?page=line / ?page=report)の google.script.run から呼ばれる ---
 function lineConsoleGetList(pin, group) { return FollowUp.getList(pin, group); }
+function lineConsoleGetReport(pin) { return FollowUp.getReport(pin); }
 function lineConsoleSend(text, pin, userIds, groupLabel) { return FollowUp.send(text, pin, userIds, groupLabel); }
 function lineConsoleSetStage(pin, userId, name, stage, memo) { return FollowUp.setStage(pin, userId, name, stage, memo); }
 function lineConsoleSaveTemplate(pin, stage, title, body) { return FollowUp.saveTemplate(pin, stage, title, body); }

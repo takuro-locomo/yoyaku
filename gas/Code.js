@@ -28,10 +28,20 @@ function doPost(e) {
 
 function doGet(e) {
   try {
-    // スマホ用: LINE追いかけ配信ページ
+    // スマホ用: LINE配信・ステージ管理ページ
     if (e.parameter.page === 'line') {
-      return HtmlService.createHtmlOutputFromFile('LineConsole')
-        .setTitle('LINE追いかけ配信')
+      var tLine = HtmlService.createTemplateFromFile('LineConsole');
+      tLine.baseUrl = ScriptApp.getService().getUrl();
+      return tLine.evaluate()
+        .setTitle('LINE配信・ステージ管理')
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    }
+    // スマホ用: KPIレポートページ
+    if (e.parameter.page === 'report') {
+      var tReport = HtmlService.createTemplateFromFile('ReportConsole');
+      tReport.baseUrl = ScriptApp.getService().getUrl();
+      return tReport.evaluate()
+        .setTitle('LINE KPIレポート')
         .addMetaTag('viewport', 'width=device-width, initial-scale=1');
     }
     const action = e.parameter.action;
