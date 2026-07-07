@@ -107,6 +107,24 @@ const FollowUp = (() => {
     }
   }
 
+  /** 最近の配信履歴（新しい順にn件）: 配信ログシートから読む */
+  function _recentSends(n) {
+    var sheet = _ss().getSheetByName(SHEET_SENDLOG);
+    if (!sheet || sheet.getLastRow() < 2) return [];
+    var last = sheet.getLastRow();
+    var num = Math.min(n, last - 1);
+    var rows = sheet.getRange(last - num + 1, 1, num, 5).getValues();
+    return rows.reverse().map(function (r) {
+      return {
+        at: _fmt(r[0]),
+        group: String(r[1] || ''),
+        count: r[2] || 0,
+        ok: String(r[3] || '').indexOf('OK') === 0,
+        head: String(r[4] || '').replace(/\n/g, ' ').slice(0, 40),
+      };
+    });
+  }
+
   /** 全ステージの人数（ブロック含む全員が母数） */
   function _stageCounts(rows) {
     var counts = {};
@@ -150,6 +168,7 @@ const FollowUp = (() => {
       stages: Stage.STAGES,
       templates: Templates.list(),
       quota: _quota(),   // {limit, used, remaining} または null
+      recentSends: _recentSends(5),
     };
   }
 

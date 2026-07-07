@@ -96,6 +96,11 @@
     <div id="result"></div>
   </div>
 
+  <div class="card">
+    <label>最近の配信（直近5件）</label>
+    <div id="sendHist"><p class="note">リストを更新すると表示されます。</p></div>
+  </div>
+
 <script>
   var users = [];
   var templates = [];      // 文面テンプレート（リスト更新時に取得）
@@ -146,6 +151,23 @@
   function pickStage(groupVal) {
     document.getElementById('group').value = groupVal;
     loadList();
+  }
+
+  function renderSendHist(items) {
+    var el = document.getElementById('sendHist');
+    if (!items || !items.length) {
+      el.innerHTML = '<p class="note">まだ配信はありません。</p>';
+      return;
+    }
+    var html = '';
+    items.forEach(function (h) {
+      html += '<div class="member"><div class="body">'
+        + '<div>' + esc(h.at) + '　' + esc(h.group) + '（' + h.count + '人）'
+        + (h.ok ? '' : ' <span class="err">エラー</span>') + '</div>'
+        + '<div class="sub">' + esc(h.head) + (h.head.length >= 40 ? '…' : '') + '</div>'
+        + '</div></div>';
+    });
+    el.innerHTML = html;
   }
 
   // ---- 文面テンプレート ----
@@ -270,6 +292,7 @@
         quota = r.quota || null;
         renderTmplSelect();
         renderBoard(r.stageCounts);
+        renderSendHist(r.recentSends);
         var quotaLine = '';
         if (quota && quota.limit != null) {
           var warn = (quota.remaining <= 20) ? ' style="color:#dc2626;font-weight:bold"' : '';
@@ -327,6 +350,10 @@
     google.script.run
       .withSuccessHandler(function (r) {
         updateSendBtn();
+        if (quota && quota.remaining != null) {   // 連続送信時の表示ズレ防止
+          quota.remaining = Math.max(0, quota.remaining - r.sent);
+          quota.used += r.sent;
+        }
         res.innerHTML = '<p class="ok">送信しました（' + r.sent + '人）:\n' + esc((r.names || []).join('、')) + '</p>';
       })
       .withFailureHandler(function (e) {
