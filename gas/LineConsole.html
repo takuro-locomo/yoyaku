@@ -84,7 +84,11 @@
 
   <div class="card">
     <label>送るメッセージ</label>
+    <select id="tmpl" onchange="applyTmpl()">
+      <option value="">テンプレートから選ぶ…（リスト更新後に表示）</option>
+    </select>
     <textarea id="msg" placeholder="例）いつもありがとうございます。ただいま◯◯キャンペーン中です。ご希望の方はこのトークにご返信ください😊"></textarea>
+    <button class="mini" onclick="saveTmpl()">💾 この文面をテンプレート保存</button>
     <button id="btnSend" onclick="doSend()" disabled>② チェックした人に送信</button>
     <p class="note">※ チェックを外した人には送りません（月200通の節約に）。送信内容は「配信ログ」シートに記録され、送った相手は「反応待ち」ステージに移ります。<br>
     ※ 「対象外」ステージの人には送信できません。<br>
@@ -94,6 +98,8 @@
 
 <script>
   var users = [];
+  var templates = [];      // 文面テンプレート（リスト更新時に取得）
+  var currentStage = '';   // いま選んでいるグループのステージ名（ステージ別のときだけ）
   var stages = ['新規', '反応待ち', '反応あり', '予約済み', '休眠', '対象外'];
   var pinEl = document.getElementById('pin');
   pinEl.value = localStorage.getItem('linePin') || '';
@@ -139,6 +145,72 @@
   function pickStage(groupVal) {
     document.getElementById('group').value = groupVal;
     loadList();
+  }
+
+  // ---- 文面テンプレート ----
+  function renderTmplSelect() {
+    var sel = document.getElementById('tmpl');
+    var html = '<option value="">テンプレートから選ぶ…</option>';
+    // いま見ているステージのテンプレを先頭に、次に共通、最後にその他
+    var order = [];
+    if (currentStage) order.push(currentStage);
+    order.push('共通');
+    var groups = {};
+    templates.forEach(function (t, i) {
+      var key = (order.indexOf(t.stage) !== -1) ? t.stage : 'その他のステージ';
+      (groups[key] = groups[key] || []).push(i);
+    });
+    order.concat(['その他のステージ']).forEach(function (key) {
+      if (!groups[key]) return;
+      html += '<optgroup label="' + esc(key) + '">';
+      groups[key].forEach(function (i) {
+        var t = templates[i];
+        var label = (key === 'その他のステージ') ? '[' + t.stage + '] ' + t.title : t.title;
+        html += '<option value="' + i + '">' + esc(label) + '</option>';
+      });
+      html += '</optgroup>';
+    });
+    sel.innerHTML = html;
+  }
+
+  function applyTmpl() {
+    var sel = document.getElementById('tmpl');
+    if (sel.value === '') return;
+    var t = templates[Number(sel.value)];
+    if (!t) return;
+    var ta = document.getElementById('msg');
+    if (ta.value.trim() && ta.value.trim() !== t.body.trim()
+        && !confirm('入力中の文面をテンプレート「' + t.title + '」で置き換えます。よろしいですか？')) {
+      sel.value = '';
+      return;
+    }
+    ta.value = t.body;
+  }
+
+  function saveTmpl() {
+    var body = document.getElementById('msg').value.trim();
+    var res = document.getElementById('result');
+    if (!body) { res.innerHTML = '<p class="err">保存する文面を入力してください。</p>'; return; }
+    var stage = currentStage || '共通';
+    var title = prompt('テンプレート名を入力してください（保存先: ' + stage + '。同じ名前は上書き）', '');
+    if (title == null) return;
+    title = title.trim();
+    if (!title) { res.innerHTML = '<p class="err">テンプレート名が空です。</p>'; return; }
+    google.script.run
+      .withSuccessHandler(function (r) {
+        // ローカルの一覧も更新して即座に選べるようにする
+        var found = false;
+        templates.forEach(function (t) {
+          if (t.stage === r.stage && t.title === r.title) { t.body = body; found = true; }
+        });
+        if (!found) templates.push({ stage: r.stage, title: r.title, body: body });
+        renderTmplSelect();
+        res.innerHTML = '<p class="ok">テンプレート「' + esc(r.title) + '」（' + esc(r.stage) + '）を保存しました。</p>';
+      })
+      .withFailureHandler(function (e) {
+        res.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
+      })
+      .lineConsoleSaveTemplate(pin(), stage, title, body);
   }
 
   function stageSelHtml(i, u) {
@@ -192,6 +264,9 @@
       .withSuccessHandler(function (r) {
         document.getElementById('btnList').disabled = false;
         users = r.users || [];
+        templates = r.templates || [];
+        currentStage = r.groupStage || '';
+        renderTmplSelect();
         renderBoard(r.stageCounts);
         document.getElementById('countLine').innerHTML =
           '<b>' + r.count + '人</b>（' + esc(r.groupLabel) + '）／ログに記録済み: ' + r.totalLogged + '人';

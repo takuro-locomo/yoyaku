@@ -114,11 +114,13 @@ const FollowUp = (() => {
     return {
       group: group,
       groupLabel: g.label,
+      groupStage: g.stage || '',   // ステージ別グループのときのステージ名
       totalLogged: alive.length,   // 母数（ログに現れたブロック以外の全員）
       count: picked.length,
       users: picked.map(_toUser),
       stageCounts: _stageCounts(rows),
       stages: Stage.STAGES,
+      templates: Templates.list(),
     };
   }
 
@@ -126,6 +128,12 @@ const FollowUp = (() => {
   function setStage(pin, userId, name, stage, memo) {
     _checkPin(pin);
     return Stage.setManual(userId, name, stage, memo);
+  }
+
+  /** 文面テンプレート保存（同じステージ+タイトルは上書き） */
+  function saveTemplate(pin, stage, title, body) {
+    _checkPin(pin);
+    return Templates.save(stage, title, body);
   }
 
   /**
@@ -200,13 +208,14 @@ const FollowUp = (() => {
     return { pinSet: true, trigger: '毎日6〜7時に updateLineUserSummary を実行' };
   }
 
-  return { getList: getList, send: send, setup: setup, setStage: setStage };
+  return { getList: getList, send: send, setup: setup, setStage: setStage, saveTemplate: saveTemplate };
 })();
 
 // --- スマホ用ページ(?page=line)の google.script.run から呼ばれる ---
 function lineConsoleGetList(pin, group) { return FollowUp.getList(pin, group); }
 function lineConsoleSend(text, pin, userIds, groupLabel) { return FollowUp.send(text, pin, userIds, groupLabel); }
 function lineConsoleSetStage(pin, userId, name, stage, memo) { return FollowUp.setStage(pin, userId, name, stage, memo); }
+function lineConsoleSaveTemplate(pin, stage, title, body) { return FollowUp.saveTemplate(pin, stage, title, body); }
 
 /** GASエディタから手動セットアップする用（'ここにPIN' を書き換えて実行） */
 function setupLineDailyFromEditor() {
