@@ -56,7 +56,8 @@
   <div class="card">
     <label>グループを選ぶ</label>
     <select id="group">
-      <optgroup label="リピート促進">
+      <optgroup label="一斉送信・リピート促進">
+        <option value="engaged">開封見込み順（残り通数ぶん自動選定）</option>
         <option value="due">そろそろ時期（来院サイクル超過）</option>
       </optgroup>
       <optgroup label="ステージ別">
@@ -349,7 +350,8 @@
             + (u.interest ? '／興味: ' + esc(u.interest) : '')
             + (u.lastSend ? '／配信: ' + esc(u.lastSend) : '')
             + (u.star ? '／★追いかけ' : '')
-            + (u.due ? '／⏰' + esc(u.due) : '');
+            + (u.due ? '／⏰' + esc(u.due) : '')
+            + (u.engage ? '／📈' + esc(u.engage) : '');
           html += '<div class="member"><input type="checkbox" id="cb_' + i + '"' + defaultChecked + ' onchange="updateSendBtn()">'
             + '<div class="body"><div>' + esc(u.name)
             + ' <span class="badge st-' + esc(u.stage) + '">' + (u.stageManual ? '✋' : '') + esc(u.stage) + '</span></div>'

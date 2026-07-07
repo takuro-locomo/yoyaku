@@ -180,6 +180,65 @@ const Insights = (() => {
   }
 
   // -------------------------------------------------------------------------
+  // ④' 開封見込みスコア（一斉送信の宛先選定用）
+  // -------------------------------------------------------------------------
+
+  /**
+   * 全ユーザーの「開封してくれそう度」スコア。
+   *  直近活動(最大40) + 反応頻度(最大20) + 予約実績(10) + 過去配信への反応率(最大20)。
+   *  2回以上配信して一度も反応がない人は -15（枠の無駄を学習して後回し）。
+   * 戻り値: {userId: {score, sendRate('m/k'または'')}}
+   */
+  function engagementScores() {
+    var byUser = {};
+    _logs().forEach(function (l) {
+      var u = byUser[l.userId] || (byUser[l.userId] = { last: l.at, reactions: 0, cv: 0, times: [] });
+      if (l.at > u.last) u.last = l.at;
+      u.times.push(l.at.getTime());
+      if (l.category !== 'ブロック/削除' && l.category !== '友だち追加' && l.category !== 'ポストバック') {
+        u.reactions++;
+      }
+      if (l.cv) u.cv++;
+    });
+    Object.keys(byUser).forEach(function (id) {
+      byUser[id].times.sort(function (a, b) { return a - b; });
+    });
+
+    // 過去の配信への反応実績（配信先履歴 × その後48時間のログ）
+    var sends = {};   // userId -> {k: 受信回数, m: 反応した回数}
+    var sheet = _ss().getSheetByName('配信先履歴');
+    if (sheet && sheet.getLastRow() >= 2) {
+      sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues().forEach(function (r) {
+        if (!(r[0] instanceof Date) || !r[1]) return;
+        var s = sends[r[1]] || (sends[r[1]] = { k: 0, m: 0 });
+        s.k++;
+        var t0 = r[0].getTime(), t1 = t0 + REACT_WINDOW_H * 3600 * 1000;
+        var times = byUser[r[1]] ? byUser[r[1]].times : [];
+        for (var i = 0; i < times.length; i++) {
+          if (times[i] > t0 && times[i] <= t1) { s.m++; break; }
+        }
+      });
+    }
+
+    var now = Date.now();
+    var out = {};
+    Object.keys(byUser).forEach(function (id) {
+      var u = byUser[id];
+      var days = (now - u.last.getTime()) / 86400000;
+      var rec = days <= 3 ? 40 : days <= 7 ? 35 : days <= 14 ? 30 : days <= 30 ? 20 : days <= 60 ? 10 : days <= 90 ? 5 : 0;
+      var freq = Math.min(u.reactions, 10) * 2;
+      var cvBonus = u.cv > 0 ? 10 : 0;
+      var s = sends[id], sendScore = 0, rate = '';
+      if (s && s.k > 0) {
+        sendScore = (s.k >= 2 && s.m === 0) ? -15 : Math.round(20 * (s.m / s.k));
+        rate = s.m + '/' + s.k;
+      }
+      out[id] = { score: rec + freq + cvBonus + sendScore, sendRate: rate };
+    });
+    return out;
+  }
+
+  // -------------------------------------------------------------------------
   // シート書き出し＆週次メール（毎朝トリガーから呼ばれる）
   // -------------------------------------------------------------------------
 
@@ -296,6 +355,7 @@ const Insights = (() => {
     sendEffects: sendEffects,
     heatmap: heatmap,
     dueList: dueList,
+    engagementScores: engagementScores,
     refreshSheets: refreshSheets,
     emailWeekly: emailWeekly,
     daily: daily,

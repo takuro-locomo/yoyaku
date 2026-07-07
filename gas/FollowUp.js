@@ -26,6 +26,7 @@ const FollowUp = (() => {
   const NUM_COLS = 21;
 
   const GROUPS = {
+    engaged:  { label: '開封見込み順（残り通数ぶん自動選定）' },
     due:      { label: 'そろそろ時期（来院サイクル超過）' },
     followup: { label: '追いかけ対象（色々見て予約ボタン→未予約）' },
     top50:    { label: 'アクティブ上位50人',  n: 50 },
@@ -161,12 +162,33 @@ const FollowUp = (() => {
     var rows = _rows();
     var alive = rows.filter(function (r) { return r[COL.blocked] !== 1; });  // ブロック除外
     var g = GROUPS[group];
+    var quotaInfo = _quota();   // 開封見込みの選定人数にも使うので先に1回だけ取得
     var picked;
-    var dueInfo = {};   // userId -> 'そろそろ' の説明文
+    var dueInfo = {};      // userId -> 'そろそろ' の説明文
+    var engagedInfo = {};  // userId -> '📈スコア◯…' の説明文
     if (g.stage) {
       // ステージ別。「対象外」だけはブロック済みも含めて表示（確認用）
       var base = (g.stage === '対象外') ? rows : alive;
       picked = base.filter(function (r) { return r[COL.stage] === g.stage; });
+    } else if (group === 'engaged') {
+      // 開封見込みスコア順に、今月の残り通数ぶん（上限200人）を自動選定。
+      // 手動「対象外」は除外（ブロックはaliveで除外済み）
+      var scores = Insights.engagementScores();
+      var cap = (quotaInfo && quotaInfo.remaining != null) ? quotaInfo.remaining : 200;
+      cap = Math.max(0, Math.min(cap, 200));
+      picked = alive.filter(function (r) { return r[COL.stage] !== '対象外'; });
+      picked.sort(function (a, b) {
+        var sa = scores[a[COL.userId]] ? scores[a[COL.userId]].score : 0;
+        var sb = scores[b[COL.userId]] ? scores[b[COL.userId]].score : 0;
+        return sb - sa;
+      });
+      picked = picked.slice(0, cap);
+      picked.forEach(function (r) {
+        var s = scores[r[COL.userId]];
+        if (s) {
+          engagedInfo[r[COL.userId]] = 'スコア' + s.score + (s.sendRate ? '（配信反応 ' + s.sendRate + '）' : '');
+        }
+      });
     } else if (group === 'due') {
       // 来院サイクル超過（Insightsで推定）。超過率の大きい順
       var due = Insights.dueList();
@@ -183,7 +205,10 @@ const FollowUp = (() => {
       picked = alive.slice(0, g.n);   // サマリーは最終アクティブ降順
     }
     var users = picked.map(_toUser);
-    users.forEach(function (u) { if (dueInfo[u.userId]) u.due = dueInfo[u.userId]; });
+    users.forEach(function (u) {
+      if (dueInfo[u.userId]) u.due = dueInfo[u.userId];
+      if (engagedInfo[u.userId]) u.engage = engagedInfo[u.userId];
+    });
     return {
       group: group,
       groupLabel: g.label,
@@ -194,7 +219,7 @@ const FollowUp = (() => {
       stageCounts: _stageCounts(rows),
       stages: Stage.STAGES,
       templates: Templates.list(),
-      quota: _quota(),   // {limit, used, remaining} または null
+      quota: quotaInfo,   // {limit, used, remaining} または null
       recentSends: _recentSends(5),
       bestTimeLabel: Insights.heatmap().label,   // おすすめ配信タイム
       dueCount: (group === 'due') ? picked.length : Insights.dueList().length,
