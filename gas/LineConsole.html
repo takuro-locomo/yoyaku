@@ -100,6 +100,7 @@
   var users = [];
   var templates = [];      // 文面テンプレート（リスト更新時に取得）
   var currentStage = '';   // いま選んでいるグループのステージ名（ステージ別のときだけ）
+  var quota = null;        // 今月の配信通数 {limit, used, remaining}
   var stages = ['新規', '反応待ち', '反応あり', '予約済み', '休眠', '対象外'];
   var pinEl = document.getElementById('pin');
   pinEl.value = localStorage.getItem('linePin') || '';
@@ -266,10 +267,17 @@
         users = r.users || [];
         templates = r.templates || [];
         currentStage = r.groupStage || '';
+        quota = r.quota || null;
         renderTmplSelect();
         renderBoard(r.stageCounts);
+        var quotaLine = '';
+        if (quota && quota.limit != null) {
+          var warn = (quota.remaining <= 20) ? ' style="color:#dc2626;font-weight:bold"' : '';
+          quotaLine = '<br><span' + warn + '>今月の配信: ' + quota.used + '/' + quota.limit
+            + '通（残り ' + quota.remaining + '通）</span>';
+        }
         document.getElementById('countLine').innerHTML =
-          '<b>' + r.count + '人</b>（' + esc(r.groupLabel) + '）／ログに記録済み: ' + r.totalLogged + '人';
+          '<b>' + r.count + '人</b>（' + esc(r.groupLabel) + '）／ログに記録済み: ' + r.totalLogged + '人' + quotaLine;
         if (!users.length) {
           el.innerHTML = '<p class="ok">このグループは現在0人です。</p>';
           updateSendBtn();
@@ -305,7 +313,14 @@
     var sel = checked();
     if (!msg) { res.innerHTML = '<p class="err">メッセージを入力してください。</p>'; return; }
     if (!sel.length) { res.innerHTML = '<p class="err">送信先にチェックを入れてください。</p>'; return; }
-    if (!confirm(sel.length + '人に送信します。よろしいですか？\n（月200通の枠を' + sel.length + '通消費します）')) return;
+    if (quota && quota.remaining != null && sel.length > quota.remaining) {
+      res.innerHTML = '<p class="err">今月の残り通数（' + quota.remaining + '通）を超えています。送信先を' + quota.remaining + '人以下に減らしてください。</p>';
+      return;
+    }
+    var quotaMsg = (quota && quota.remaining != null)
+      ? '\n（今月の残り ' + quota.remaining + '通 → 送信後 ' + (quota.remaining - sel.length) + '通）'
+      : '\n（月200通の枠を' + sel.length + '通消費します）';
+    if (!confirm(sel.length + '人に送信します。よろしいですか？' + quotaMsg)) return;
     document.getElementById('btnSend').disabled = true;
     res.innerHTML = '<p class="note">送信中…</p>';
     var groupLabel = document.getElementById('group').selectedOptions[0].textContent;

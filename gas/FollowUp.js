@@ -1,13 +1,15 @@
 /**
- * FollowUp.gs - LINE追いかけ配信（営業メッセージの直接送信）
+ * FollowUp.gs - LINE追いかけ配信＋ステージ管理（営業メッセージの直接送信）
  *
- * 「ユーザー別サマリー」からグループ（追いかけ★／アクティブ上位50・100・150人）を作り、
- * multicastでメッセージを直接送る。スマホ用ページ(?page=line)から操作する。
+ * 「ユーザー別サマリー」からグループ（ステージ別6種／追いかけ★／アクティブ上位50・100・150人）
+ * を作り、multicastでメッセージを直接送る。スマホ用ページ(?page=line)から操作する。
  * チェックを外した人には送らない（個別送信＝月200通の節約用）。
+ * ステージの手動変更・文面テンプレート・今月の残り通数表示にも対応（Stage.gs / Templates.gs）。
  *
  * 保護: ScriptProperties(LINE_CONSOLE_PIN) のPINが一致しないと一覧も送信も不可。
- * 記録: 同じスプレッドシートの「配信ログ」シートに全送信を記録する。
- * 注意: 無料プランは月200通まで（1回の送信で送信人数分を消費）。
+ *       「対象外」ステージ（ブロック・手動除外）には送信できない。
+ * 記録: 「配信ログ」シート（1送信1行）と「配信先履歴」シート（1人1行・反応待ち判定用）。
+ * 注意: 無料プランは月200通まで（1回の送信で送信人数分を消費）。残量超過は送信前にブロック。
  * 母数: 行動ログ(2026-07-02開始)に現れたユーザーだけが対象。時間とともに増える。
  */
 
@@ -79,6 +81,32 @@ const FollowUp = (() => {
     };
   }
 
+  /**
+   * 今月の配信通数（LINE API）。取得できなければnull（画面には出さないだけ）。
+   * quota: {type:'limited', value:200} または {type:'none'}（従量プラン等）
+   */
+  function _quota() {
+    var token = _props().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
+    if (!token) return null;
+    try {
+      var opt = { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true };
+      var q = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/quota', opt);
+      var c = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/quota/consumption', opt);
+      if (q.getResponseCode() !== 200 || c.getResponseCode() !== 200) return null;
+      var quota = JSON.parse(q.getContentText());
+      var used = JSON.parse(c.getContentText()).totalUsage || 0;
+      var limit = (quota.type === 'limited') ? quota.value : null;
+      return {
+        limit: limit,
+        used: used,
+        remaining: (limit != null) ? Math.max(0, limit - used) : null,
+      };
+    } catch (e) {
+      Logger.log('[FollowUp] quota fetch failed (ignored): ' + e.message);
+      return null;
+    }
+  }
+
   /** 全ステージの人数（ブロック含む全員が母数） */
   function _stageCounts(rows) {
     var counts = {};
@@ -121,6 +149,7 @@ const FollowUp = (() => {
       stageCounts: _stageCounts(rows),
       stages: Stage.STAGES,
       templates: Templates.list(),
+      quota: _quota(),   // {limit, used, remaining} または null
     };
   }
 
@@ -158,6 +187,12 @@ const FollowUp = (() => {
     });
     var targets = userIds.filter(function (id) { return byId[id]; });
     if (!targets.length) throw new Error('有効な送信先がありません（ブロック済み・対象外ステージ等）。');
+
+    // 月間上限の事前チェック（取得できないときはスキップしてLINE側のエラーに任せる）
+    var quota = _quota();
+    if (quota && quota.remaining != null && targets.length > quota.remaining) {
+      throw new Error('今月の残り通数(' + quota.remaining + '通)を超えるため送信できません（送信予定: ' + targets.length + '人）。');
+    }
 
     var errors = [];
     for (var i = 0; i < targets.length; i += 500) {   // multicastは1回500人まで
