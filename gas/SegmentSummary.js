@@ -136,7 +136,12 @@ const SegmentSummary = (() => {
   return { update };
 })();
 
-/** Apps Scriptエディタから手動実行する用 */
+/** 毎朝のトリガー＆エディタから手動実行する用（集計＋分析シート更新＋月曜は週次メール） */
 function updateLineUserSummary() {
   Logger.log(JSON.stringify(SegmentSummary.update()));
+  try {
+    Logger.log(JSON.stringify(Insights.daily()));
+  } catch (e) {
+    Logger.log('[updateLineUserSummary] Insights.daily failed (ignored): ' + e.message);
+  }
 }

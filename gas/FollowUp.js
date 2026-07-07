@@ -26,6 +26,7 @@ const FollowUp = (() => {
   const NUM_COLS = 21;
 
   const GROUPS = {
+    due:      { label: 'そろそろ時期（来院サイクル超過）' },
     followup: { label: '追いかけ対象（色々見て予約ボタン→未予約）' },
     top50:    { label: 'アクティブ上位50人',  n: 50 },
     top100:   { label: 'アクティブ上位100人', n: 100 },
@@ -107,20 +108,33 @@ const FollowUp = (() => {
     }
   }
 
-  /** 最近の配信履歴（新しい順にn件）: 配信ログシートから読む */
+  /** 最近の配信履歴（新しい順にn件）: 配信ログ＋48時間以内の反応数（Insights） */
   function _recentSends(n) {
     var sheet = _ss().getSheetByName(SHEET_SENDLOG);
     if (!sheet || sheet.getLastRow() < 2) return [];
     var last = sheet.getLastRow();
     var num = Math.min(n, last - 1);
     var rows = sheet.getRange(last - num + 1, 1, num, 5).getValues();
+    var effects = [];
+    try { effects = Insights.sendEffects(n * 2); } catch (e) {
+      Logger.log('[FollowUp] sendEffects failed (ignored): ' + e.message);
+    }
     return rows.reverse().map(function (r) {
+      var atMs = (r[0] instanceof Date) ? r[0].getTime() : 0;
+      var group = String(r[1] || '');
+      var eff = null;
+      effects.forEach(function (b) {   // 同一送信の突き合わせ: 2分以内＋同グループ
+        if (!eff && Math.abs(b.atMs - atMs) < 120000 && b.group === group) eff = b;
+      });
       return {
         at: _fmt(r[0]),
-        group: String(r[1] || ''),
+        group: group,
         count: r[2] || 0,
         ok: String(r[3] || '').indexOf('OK') === 0,
         head: String(r[4] || '').replace(/\n/g, ' ').slice(0, 40),
+        reacted: eff ? eff.reacted : null,   // null=個人記録がない古い配信
+        cvAfter: eff ? eff.cv : null,
+        blockedAfter: eff ? eff.blocked : null,
       };
     });
   }
@@ -148,27 +162,42 @@ const FollowUp = (() => {
     var alive = rows.filter(function (r) { return r[COL.blocked] !== 1; });  // ブロック除外
     var g = GROUPS[group];
     var picked;
+    var dueInfo = {};   // userId -> 'そろそろ' の説明文
     if (g.stage) {
       // ステージ別。「対象外」だけはブロック済みも含めて表示（確認用）
       var base = (g.stage === '対象外') ? rows : alive;
       picked = base.filter(function (r) { return r[COL.stage] === g.stage; });
+    } else if (group === 'due') {
+      // 来院サイクル超過（Insightsで推定）。超過率の大きい順
+      var due = Insights.dueList();
+      var order = {};
+      due.forEach(function (u, i) {
+        order[u.userId] = i;
+        dueInfo[u.userId] = '前回予約から' + u.daysSince + '日（サイクル約' + u.cycleDays + '日）';
+      });
+      picked = alive.filter(function (r) { return dueInfo[r[COL.userId]] !== undefined; });
+      picked.sort(function (a, b) { return order[a[COL.userId]] - order[b[COL.userId]]; });
     } else if (group === 'followup') {
       picked = alive.filter(function (r) { return r[COL.followUp] === '★'; });
     } else {
       picked = alive.slice(0, g.n);   // サマリーは最終アクティブ降順
     }
+    var users = picked.map(_toUser);
+    users.forEach(function (u) { if (dueInfo[u.userId]) u.due = dueInfo[u.userId]; });
     return {
       group: group,
       groupLabel: g.label,
       groupStage: g.stage || '',   // ステージ別グループのときのステージ名
       totalLogged: alive.length,   // 母数（ログに現れたブロック以外の全員）
       count: picked.length,
-      users: picked.map(_toUser),
+      users: users,
       stageCounts: _stageCounts(rows),
       stages: Stage.STAGES,
       templates: Templates.list(),
       quota: _quota(),   // {limit, used, remaining} または null
       recentSends: _recentSends(5),
+      bestTimeLabel: Insights.heatmap().label,   // おすすめ配信タイム
+      dueCount: (group === 'due') ? picked.length : Insights.dueList().length,
     };
   }
 

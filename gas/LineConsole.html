@@ -56,6 +56,9 @@
   <div class="card">
     <label>グループを選ぶ</label>
     <select id="group">
+      <optgroup label="リピート促進">
+        <option value="due">そろそろ時期（来院サイクル超過）</option>
+      </optgroup>
       <optgroup label="ステージ別">
         <option value="stage_new">新規</option>
         <option value="stage_untouched">反応待ち</option>
@@ -100,6 +103,7 @@
 
   <div class="card">
     <label>最近の配信（直近5件）</label>
+    <p class="note" id="bestTime"></p>
     <div id="sendHist"><p class="note">リストを更新すると表示されます。</p></div>
   </div>
 
@@ -163,9 +167,14 @@
     }
     var html = '';
     items.forEach(function (h) {
+      var eff = '';
+      if (h.reacted != null) {   // 48時間以内の反応（個人記録がある配信のみ）
+        eff = '　→ 反応' + h.reacted + '人・予約' + h.cvAfter + '人'
+          + (h.blockedAfter ? '・<span class="err">ブロック' + h.blockedAfter + '人</span>' : '');
+      }
       html += '<div class="member"><div class="body">'
         + '<div>' + esc(h.at) + '　' + esc(h.group) + '（' + h.count + '人）'
-        + (h.ok ? '' : ' <span class="err">エラー</span>') + '</div>'
+        + (h.ok ? '' : ' <span class="err">エラー</span>') + eff + '</div>'
         + '<div class="sub">' + esc(h.head) + (h.head.length >= 40 ? '…' : '') + '</div>'
         + '</div></div>';
     });
@@ -319,6 +328,7 @@
         renderTmplSelect();
         renderBoard(r.stageCounts);
         renderSendHist(r.recentSends);
+        document.getElementById('bestTime').textContent = r.bestTimeLabel || '';
         var quotaLine = '';
         if (quota && quota.limit != null) {
           var warn = (quota.remaining <= 20) ? ' style="color:#dc2626;font-weight:bold"' : '';
@@ -338,7 +348,8 @@
           var sub = '最終: ' + esc(u.lastActive)
             + (u.interest ? '／興味: ' + esc(u.interest) : '')
             + (u.lastSend ? '／配信: ' + esc(u.lastSend) : '')
-            + (u.star ? '／★追いかけ' : '');
+            + (u.star ? '／★追いかけ' : '')
+            + (u.due ? '／⏰' + esc(u.due) : '');
           html += '<div class="member"><input type="checkbox" id="cb_' + i + '"' + defaultChecked + ' onchange="updateSendBtn()">'
             + '<div class="body"><div>' + esc(u.name)
             + ' <span class="badge st-' + esc(u.stage) + '">' + (u.stageManual ? '✋' : '') + esc(u.stage) + '</span></div>'
