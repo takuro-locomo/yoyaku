@@ -88,9 +88,11 @@
       <option value="">テンプレートから選ぶ…（リスト更新後に表示）</option>
     </select>
     <textarea id="msg" placeholder="例）いつもありがとうございます。ただいま◯◯キャンペーン中です。ご希望の方はこのトークにご返信ください😊"></textarea>
-    <button class="mini" onclick="saveTmpl()">💾 この文面をテンプレート保存</button>
+    <button class="mini" onclick="saveTmpl()">💾 テンプレート保存</button>
+    <button class="mini" onclick="copyMsg()">📋 本文コピー</button>
     <button id="btnSend" onclick="doSend()" disabled>② チェックした人に送信</button>
-    <p class="note">※ チェックを外した人には送りません（月200通の節約に）。送信内容は「配信ログ」シートに記録され、送った相手は「反応待ち」ステージに移ります。<br>
+    <p class="note">※ ここからの送信は<b>1人でも月200通の枠を消費</b>します。1〜数人への個別フォローは「📋 本文コピー」→公式LINEアプリのチャットに貼り付けて送ると<b>無料</b>です（相手から一度でもトークがあった人のみ）。<br>
+    ※ チェックを外した人には送りません。送信内容は「配信ログ」シートに記録され、送った相手は「反応待ち」ステージに移ります。<br>
     ※ 「対象外」ステージの人には送信できません。<br>
     ※ 母数はLINE行動ログ(7/2開始)に記録された人のみ。記録が貯まるほど増えます。</p>
     <div id="result"></div>
@@ -208,6 +210,30 @@
       return;
     }
     ta.value = t.body;
+  }
+
+  function copyMsg() {
+    var ta = document.getElementById('msg');
+    var res = document.getElementById('result');
+    var text = ta.value;
+    if (!text.trim()) { res.innerHTML = '<p class="err">コピーする文面を入力してください。</p>'; return; }
+    var okMsg = '<p class="ok">コピーしました📋 公式LINEアプリのチャットに貼り付けて送れば無料です（200通の枠を使いません）。</p>';
+    // GASのiframe内でも動くよう、まず選択+execCommand、だめならClipboard APIを試す
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    var done = false;
+    try { done = document.execCommand('copy'); } catch (e) {}
+    if (done) { res.innerHTML = okMsg; return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(function () { res.innerHTML = okMsg; })
+        .catch(function () {
+          res.innerHTML = '<p class="err">自動コピーできませんでした。本文を長押しして手動でコピーしてください。</p>';
+        });
+    } else {
+      res.innerHTML = '<p class="err">自動コピーできませんでした。本文を長押しして手動でコピーしてください。</p>';
+    }
   }
 
   function saveTmpl() {
