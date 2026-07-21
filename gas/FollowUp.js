@@ -179,10 +179,21 @@ const FollowUp = (() => {
     } else if (group === 'engaged') {
       // 開封見込みスコア順に、今月の残り通数ぶん（上限200人）を自動選定。
       // 手動「対象外」は除外（ブロックはaliveで除外済み）
+      // 今日すでに送った人は自動除外（同日2回目の配信で被らない）
       var scores = Insights.engagementScores();
+      var lastSendMap = Stage.getLastSendMap();
+      var todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      var todayMs = todayStart.getTime();
       var cap = (quotaInfo && quotaInfo.remaining != null) ? quotaInfo.remaining : 200;
       cap = Math.max(0, Math.min(cap, 200));
-      picked = alive.filter(function (r) { return r[COL.stage] !== '対象外'; });
+      picked = alive.filter(function (r) {
+        if (r[COL.stage] === '対象外') return false;
+        // 今日すでに送った人は除外
+        var ls = lastSendMap[r[COL.userId]];
+        if (ls && ls.getTime() >= todayMs) return false;
+        return true;
+      });
       picked.sort(function (a, b) {
         var sa = scores[a[COL.userId]] ? scores[a[COL.userId]].score : 0;
         var sb = scores[b[COL.userId]] ? scores[b[COL.userId]].score : 0;
