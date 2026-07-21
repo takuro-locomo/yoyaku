@@ -32,6 +32,12 @@ const FollowUp = (() => {
     top50:    { label: 'アクティブ上位50人',  n: 50 },
     top100:   { label: 'アクティブ上位100人', n: 100 },
     top150:   { label: 'アクティブ上位150人', n: 150 },
+    // 未送信期間別
+    nosend_1w:  { label: '1週間以上 未送信', nosendDays: 7 },
+    nosend_2w:  { label: '2週間以上 未送信', nosendDays: 14 },
+    nosend_3w:  { label: '3週間以上 未送信', nosendDays: 21 },
+    nosend_2m:  { label: '2ヶ月以上 未送信', nosendDays: 60 },
+    nosend_3m:  { label: '3ヶ月以上 未送信', nosendDays: 90 },
     // ステージ別
     stage_new:       { label: 'ステージ: 新規',     stage: '新規' },
     stage_untouched: { label: 'ステージ: 反応待ち', stage: '反応待ち' },
@@ -199,6 +205,24 @@ const FollowUp = (() => {
       });
       picked = alive.filter(function (r) { return dueInfo[r[COL.userId]] !== undefined; });
       picked.sort(function (a, b) { return order[a[COL.userId]] - order[b[COL.userId]]; });
+    } else if (g.nosendDays) {
+      // 一定期間こちらが送信していない人（対象外ステージは除外）
+      var cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - g.nosendDays);
+      var cutoffMs = cutoff.getTime();
+      picked = alive.filter(function (r) {
+        if (r[COL.stage] === '対象外') return false;
+        var ls = r[COL.lastSend];
+        if (!ls || ls === '') return true;  // 一度も送っていない人は含める
+        var lsDate = (ls instanceof Date) ? ls : new Date(ls);
+        return !isNaN(lsDate.getTime()) && lsDate.getTime() < cutoffMs;
+      });
+      // 最終送信が古い順にソート
+      picked.sort(function (a, b) {
+        var da = a[COL.lastSend] instanceof Date ? a[COL.lastSend].getTime() : 0;
+        var db = b[COL.lastSend] instanceof Date ? b[COL.lastSend].getTime() : 0;
+        return da - db;
+      });
     } else if (group === 'followup') {
       picked = alive.filter(function (r) { return r[COL.followUp] === '★'; });
     } else {
