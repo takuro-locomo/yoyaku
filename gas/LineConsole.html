@@ -58,7 +58,11 @@
     <label>グループを選ぶ</label>
     <select id="group">
       <optgroup label="一斉送信・リピート促進">
-        <option value="engaged">開封見込み順（残り通数ぶん・今日送った人は除外）</option>
+        <option value="engaged">開封見込み順（今日送った人は除外）</option>
+        <option value="engaged_2d">開封見込み順（2日以内は除外）</option>
+        <option value="engaged_3d">開封見込み順（3日以内は除外）</option>
+        <option value="engaged_1w">開封見込み順（1週間以内は除外）</option>
+        <option value="engaged_2w">開封見込み順（2週間以内は除外）</option>
         <option value="due">そろそろ時期（来院サイクル超過）</option>
       </optgroup>
       <optgroup label="ステージ別">

@@ -26,7 +26,11 @@ const FollowUp = (() => {
   const NUM_COLS = 21;
 
   const GROUPS = {
-    engaged:  { label: '開封見込み順（残り通数ぶん自動選定）' },
+    engaged:      { label: '開封見込み順（今日送った人は除外）', excludeDays: 1 },
+    engaged_2d:   { label: '開封見込み順（2日以内に送った人は除外）', excludeDays: 2 },
+    engaged_3d:   { label: '開封見込み順（3日以内に送った人は除外）', excludeDays: 3 },
+    engaged_1w:   { label: '開封見込み順（1週間以内に送った人は除外）', excludeDays: 7 },
+    engaged_2w:   { label: '開封見込み順（2週間以内に送った人は除外）', excludeDays: 14 },
     due:      { label: 'そろそろ時期（来院サイクル超過）' },
     followup: { label: '追いかけ対象（色々見て予約ボタン→未予約）' },
     top50:    { label: 'アクティブ上位50人',  n: 50 },
@@ -176,22 +180,25 @@ const FollowUp = (() => {
       // ステージ別。「対象外」だけはブロック済みも含めて表示（確認用）
       var base = (g.stage === '対象外') ? rows : alive;
       picked = base.filter(function (r) { return r[COL.stage] === g.stage; });
-    } else if (group === 'engaged') {
+    } else if (g.excludeDays) {
       // 開封見込みスコア順に、今月の残り通数ぶん（上限200人）を自動選定。
       // 手動「対象外」は除外（ブロックはaliveで除外済み）
-      // 今日すでに送った人は自動除外（同日2回目の配信で被らない）
+      // excludeDays以内に送った人は自動除外
       var scores = Insights.engagementScores();
       var lastSendMap = Stage.getLastSendMap();
-      var todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      var todayMs = todayStart.getTime();
+      var cutoff = new Date();
+      if (g.excludeDays === 1) {
+        cutoff.setHours(0, 0, 0, 0);  // 今日の0時以降
+      } else {
+        cutoff.setDate(cutoff.getDate() - g.excludeDays);
+      }
+      var cutoffMs = cutoff.getTime();
       var cap = (quotaInfo && quotaInfo.remaining != null) ? quotaInfo.remaining : 200;
       cap = Math.max(0, Math.min(cap, 200));
       picked = alive.filter(function (r) {
         if (r[COL.stage] === '対象外') return false;
-        // 今日すでに送った人は除外
         var ls = lastSendMap[r[COL.userId]];
-        if (ls && ls.getTime() >= todayMs) return false;
+        if (ls && ls.getTime() >= cutoffMs) return false;
         return true;
       });
       picked.sort(function (a, b) {
