@@ -40,6 +40,7 @@ const FollowUp = (() => {
     nosend_1w:  { label: '1週間以上 未送信', nosendDays: 7 },
     nosend_2w:  { label: '2週間以上 未送信', nosendDays: 14 },
     nosend_3w:  { label: '3週間以上 未送信', nosendDays: 21 },
+    nosend_1m:  { label: '1ヶ月以上 未送信', nosendDays: 30 },
     nosend_2m:  { label: '2ヶ月以上 未送信', nosendDays: 60 },
     nosend_3m:  { label: '3ヶ月以上 未送信', nosendDays: 90 },
     // ステージ別
@@ -268,6 +269,42 @@ const FollowUp = (() => {
     };
   }
 
+  function _sendLogSheet() {
+    var sheet = _ss().getSheetByName(SHEET_SENDLOG) || _ss().insertSheet(SHEET_SENDLOG);
+    if (sheet.getLastRow() === 0) {
+      sheet.getRange(1, 1, 1, 6)
+        .setValues([['日時', 'グループ', '送信人数', '結果', '本文', '送信先(表示名)']]).setFontWeight('bold');
+      sheet.setFrozenRows(1);
+    }
+    return sheet;
+  }
+
+  /**
+   * 手動チャット送信の記録（📋本文コピー→公式LINEアプリのチャットで送った分）。
+   * API送信ではないので通数は消費しない。「配信先履歴」に残すことで、
+   * ステージの「反応待ち」判定・「◯◯以上 未送信」グループ・開封見込みスコアに反映される。
+   * users: [{userId, name}]（画面でチェックした人）
+   */
+  function recordManual(pin, users, text) {
+    _checkPin(pin);
+    if (!users || !users.length) throw new Error('記録する相手が選ばれていません。');
+    var byId = {}, ids = [];
+    users.forEach(function (u) {
+      if (u && u.userId && !byId[u.userId]) {
+        byId[u.userId] = u.name || '(名前なし)';
+        ids.push(u.userId);
+      }
+    });
+    if (!ids.length) throw new Error('記録する相手が選ばれていません。');
+    var names = ids.map(function (id) { return byId[id]; });
+    _sendLogSheet().appendRow([
+      new Date(), '手動チャット', ids.length, 'OK(手動)',
+      String(text || '').slice(0, 500), names.join('、'),
+    ]);
+    Stage.recordSends(ids, byId, '手動チャット');
+    return { recorded: ids.length, names: names };
+  }
+
   /** 手動ステージ変更（'（自動）'で自動判定に戻す） */
   function setStage(pin, userId, name, stage, memo) {
     _checkPin(pin);
@@ -333,12 +370,7 @@ const FollowUp = (() => {
 
     var ok = errors.length === 0;
     var names = targets.map(function (id) { return byId[id]; });
-    var logSheet = _ss().getSheetByName(SHEET_SENDLOG) || _ss().insertSheet(SHEET_SENDLOG);
-    if (logSheet.getLastRow() === 0) {
-      logSheet.getRange(1, 1, 1, 6)
-        .setValues([['日時', 'グループ', '送信人数', '結果', '本文', '送信先(表示名)']]).setFontWeight('bold');
-      logSheet.setFrozenRows(1);
-    }
+    var logSheet = _sendLogSheet();
     logSheet.appendRow([
       new Date(), groupLabel || '', targets.length,
       ok ? 'OK' : 'エラー: ' + errors.join(' / '), text, names.join('、'),
@@ -366,7 +398,7 @@ const FollowUp = (() => {
     return { pinSet: true, trigger: '毎日6〜7時に updateLineUserSummary を実行' };
   }
 
-  return { getList: getList, send: send, setup: setup, setStage: setStage, saveTemplate: saveTemplate, getReport: getReport };
+  return { getList: getList, send: send, setup: setup, setStage: setStage, saveTemplate: saveTemplate, getReport: getReport, recordManual: recordManual };
 })();
 
 // --- スマホ用ページ(?page=line / ?page=report)の google.script.run から呼ばれる ---
@@ -375,6 +407,7 @@ function lineConsoleGetReport(pin) { return FollowUp.getReport(pin); }
 function lineConsoleSend(text, pin, userIds, groupLabel) { return FollowUp.send(text, pin, userIds, groupLabel); }
 function lineConsoleSetStage(pin, userId, name, stage, memo) { return FollowUp.setStage(pin, userId, name, stage, memo); }
 function lineConsoleSaveTemplate(pin, stage, title, body) { return FollowUp.saveTemplate(pin, stage, title, body); }
+function lineConsoleRecordManual(pin, users, text) { return FollowUp.recordManual(pin, users, text); }
 
 /** GASエディタから手動セットアップする用（'ここにPIN' を書き換えて実行） */
 function setupLineDailyFromEditor() {

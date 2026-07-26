@@ -77,6 +77,7 @@
         <option value="nosend_1w">1週間以上 未送信</option>
         <option value="nosend_2w">2週間以上 未送信</option>
         <option value="nosend_3w">3週間以上 未送信</option>
+        <option value="nosend_1m">1ヶ月以上 未送信</option>
         <option value="nosend_2m">2ヶ月以上 未送信</option>
         <option value="nosend_3m">3ヶ月以上 未送信</option>
       </optgroup>
@@ -106,8 +107,10 @@
     <textarea id="msg" placeholder="例）いつもありがとうございます。ただいま◯◯キャンペーン中です。ご希望の方はこのトークにご返信ください😊"></textarea>
     <button class="mini" onclick="saveTmpl()">💾 テンプレート保存</button>
     <button class="mini" onclick="copyMsg()">📋 本文コピー</button>
+    <button class="mini" onclick="recordManual()">✅ 手動送信を記録</button>
     <button id="btnSend" onclick="doSend()" disabled>② チェックした人に送信</button>
     <p class="note">※ ここからの送信は<b>1人でも月200通の枠を消費</b>します。1〜数人への個別フォローは「📋 本文コピー」→公式LINEアプリのチャットに貼り付けて送ると<b>無料</b>です（相手から一度でもトークがあった人のみ）。<br>
+    ※ 公式LINEアプリで手動送信したら、送った人にチェックを入れて「<b>✅ 手動送信を記録</b>」を押してください。記録しないとステージ（反応待ち）や「◯◯以上 未送信」グループに反映されません。<br>
     ※ チェックを外した人には送りません。送信内容は「配信ログ」シートに記録され、送った相手は「反応待ち」ステージに移ります。<br>
     ※ 「対象外」ステージの人には送信できません。<br>
     ※ 母数はLINE行動ログ(7/2開始)に記録された人のみ。記録が貯まるほど増えます。</p>
@@ -239,7 +242,7 @@
     var res = document.getElementById('result');
     var text = ta.value;
     if (!text.trim()) { res.innerHTML = '<p class="err">コピーする文面を入力してください。</p>'; return; }
-    var okMsg = '<p class="ok">コピーしました📋 公式LINEアプリのチャットに貼り付けて送れば無料です（200通の枠を使いません）。</p>';
+    var okMsg = '<p class="ok">コピーしました📋 公式LINEアプリのチャットに貼り付けて送れば無料です（200通の枠を使いません）。\n送ったら、送った人にチェックを入れて「✅ 手動送信を記録」を押してください（ステージ・未送信グループに反映されます）。</p>';
     // GASのiframe内でも動くよう、まず選択+execCommand、だめならClipboard APIを試す
     ta.focus();
     ta.select();
@@ -256,6 +259,24 @@
     } else {
       res.innerHTML = '<p class="err">自動コピーできませんでした。本文を長押しして手動でコピーしてください。</p>';
     }
+  }
+
+  function recordManual() {
+    var res = document.getElementById('result');
+    var sel = checked();
+    if (!sel.length) { res.innerHTML = '<p class="err">記録する相手にチェックを入れてください。</p>'; return; }
+    var names = sel.map(function (u) { return u.name; }).join('、');
+    if (!confirm('チェックした' + sel.length + '人を「手動チャットで送信済み」として記録します。\n（200通の枠は使いません。ステージや未送信グループに反映されます）\n\n' + names)) return;
+    res.innerHTML = '<p class="note">記録中…</p>';
+    var text = document.getElementById('msg').value.trim();
+    google.script.run
+      .withSuccessHandler(function (r) {
+        res.innerHTML = '<p class="ok">' + r.recorded + '人を手動送信済みとして記録しました📝\nリストを更新すると「反応待ち」や未送信グループに反映されます。</p>';
+      })
+      .withFailureHandler(function (e) {
+        res.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
+      })
+      .lineConsoleRecordManual(pin(), sel.map(function (u) { return { userId: u.userId, name: u.name }; }), text);
   }
 
   function saveTmpl() {
