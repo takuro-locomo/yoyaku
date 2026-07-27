@@ -36,6 +36,14 @@ function doGet(e) {
         .setTitle('LINE配信・ステージ管理')
         .addMetaTag('viewport', 'width=device-width, initial-scale=1');
     }
+    // スマホ用: 用語の説明ページ
+    if (e.parameter.page === 'help') {
+      var tHelp = HtmlService.createTemplateFromFile('HelpConsole');
+      tHelp.baseUrl = ScriptApp.getService().getUrl();
+      return tHelp.evaluate()
+        .setTitle('用語の説明')
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    }
     // スマホ用: KPIレポートページ
     if (e.parameter.page === 'report') {
       var tReport = HtmlService.createTemplateFromFile('ReportConsole');

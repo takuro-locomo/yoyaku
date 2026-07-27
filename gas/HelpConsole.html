@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  body { font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif; margin: 0; padding: 16px; background: #f6f7f9; color: #1f2937; }
+  h1 { font-size: 18px; margin: 4px 0 14px; }
+  h2 { font-size: 15px; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 2px solid #e5e7eb; }
+  .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .note { font-size: 12px; color: #6b7280; }
+  .item { padding: 8px 0; border-bottom: 1px solid #f0f1f3; font-size: 14px; }
+  .item:last-child { border-bottom: 0; }
+  .item .t { font-weight: bold; margin-bottom: 2px; }
+  .item .d { font-size: 13px; color: #374151; }
+  .item .ex { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  .badge { display: inline-block; border-radius: 6px; padding: 1px 8px; font-size: 12px; font-weight: bold; margin-right: 4px; }
+  .st-新規 { background: #dbeafe; color: #1d4ed8; }
+  .st-反応待ち { background: #fef3c7; color: #b45309; }
+  .st-反応あり { background: #dcfce7; color: #15803d; }
+  .st-予約済み { background: #ede9fe; color: #6d28d9; }
+  .st-休眠 { background: #e5e7eb; color: #4b5563; }
+  .st-対象外 { background: #fee2e2; color: #b91c1c; }
+  .flow { background: #f3f4f6; border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-top: 8px; }
+  a.back { color: #2563eb; text-decoration: none; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>用語の説明（LINE配信・ステージ管理）</h1>
+  <div style="margin-bottom:12px"><a class="back" href="<?= baseUrl ?>?page=line">← 配信ページに戻る</a></div>
+
+  <div class="card">
+    <h2>ステージ（1人1つ・毎回自動判定）</h2>
+    <p class="note">「いま、お客さんとの関係がどの段階か」を表します。判定の優先順位は<br>
+    <b>✋手動で固定 ＞ ブロック ＞ 休眠 ＞ 予約済み ＞ 反応待ち ＞ 反応あり ＞ 新規</b> の順です。</p>
+
+    <div class="item">
+      <div class="t"><span class="badge st-新規">新規</span>まだ何も起きていない人</div>
+      <div class="d">友だちになった（ログに現れた）だけで、お客さんからの反応がなく、こちらからも何も送っていない状態。</div>
+      <div class="ex">例）友だち追加しただけで、ボタンもトークもまだの人</div>
+    </div>
+    <div class="item">
+      <div class="t"><span class="badge st-反応待ち">反応待ち</span>ボールが相手にある人</div>
+      <div class="d"><b>こちらから送ったのが最後</b>で、その後お客さんから何の反応もない状態。「送った」には一斉配信と、✅で記録した手動チャットの両方が含まれます。</div>
+      <div class="ex">例）7/20にキャンペーン配信 → お客さんはまだ何も押していない・返信していない → 反応待ち。<br>その後お客さんがボタンを押したり返信したりすると「反応あり」に変わります。</div>
+    </div>
+    <div class="item">
+      <div class="t"><span class="badge st-反応あり">反応あり</span>反応してくれている人（未予約）</div>
+      <div class="d">お客さんの動き（ボタンタップ・トーク・スタンプなど）が最後になっている状態。ただし予約フォームの返信はまだない人。</div>
+      <div class="ex">例）予約ボタンを押したけどフォームは送っていない人／こちらの配信に返信をくれた人</div>
+    </div>
+    <div class="item">
+      <div class="t"><span class="badge st-予約済み">予約済み</span>予約フォームを送ってくれた人</div>
+      <div class="d">予約フォーム返信（お名前＋ご希望日時/施術の形式）が1回以上ある人。</div>
+    </div>
+    <div class="item">
+      <div class="t"><span class="badge st-休眠">休眠</span>90日以上なにも反応がない人</div>
+      <div class="d">最後の反応から90日以上たった人。<b>予約済みの人でもここに落ちます</b>（＝リピートの再アプローチ対象にするため）。</div>
+    </div>
+    <div class="item">
+      <div class="t"><span class="badge st-対象外">対象外</span>送ってはいけない人</div>
+      <div class="d">ブロック・友だち削除した人、または手動で「対象外」にした人。このステージの人には送信できません。</div>
+    </div>
+    <p class="note">ステージはリスト更新のたびに自動で判定し直されます。手動で変更した人には ✋ が付き、「（自動）」に戻すまで固定されます。</p>
+  </div>
+
+  <div class="card">
+    <h2>グループ（送る相手の絞り込み方）</h2>
+
+    <div class="item">
+      <div class="t">開封見込み順（◯◯以内は除外）</div>
+      <div class="d">「読んでくれそうな人」から順に、今月の残り通数ぶんを自動で選びます。スコア＝直近の活動(40)＋反応の頻度(20)＋予約実績(10)＋過去の配信への反応率(20)。2回以上配信して一度も反応がない人は減点。最近送ったばかりの人は除外できます。<b>一斉送信はこれを使う運用です。</b></div>
+    </div>
+    <div class="item">
+      <div class="t">そろそろ時期（来院サイクル超過）</div>
+      <div class="d">予約の間隔からその人の来院サイクルを推定し、前回予約からサイクル日数を超えた人。⏰マークで「前回から◯日」が出ます。</div>
+    </div>
+    <div class="item">
+      <div class="t">ステージ別</div>
+      <div class="d">上の6ステージそのままの絞り込みです。ステージボードの数字をタップしても同じです。</div>
+    </div>
+    <div class="item">
+      <div class="t">◯◯以上 未送信</div>
+      <div class="d"><b>こちらから</b>その期間なにも送っていない人（一斉配信も✅記録した手動チャットも含めて）。一度も送っていない人も含みます。</div>
+      <div class="ex">「しばらく何もアプローチしていない人」を探すときに使います。</div>
+    </div>
+    <div class="item">
+      <div class="t">◯◯以上 客からトークなし</div>
+      <div class="d"><b>お客さんから</b>その期間、手動のトーク（自分で打ったメッセージ・スタンプ・画像・予約フォーム返信）が来ていない人。<b>リッチメニューのボタンタップは「トーク」に数えません</b>（タップは自動送信のため）。一度もトークがない人も含みます。</div>
+    </div>
+    <div class="item">
+      <div class="t">🔥興味あり＆◯◯以上トークなし</div>
+      <div class="d">上の「トークなし」に加えて、<b>興味の行動がある人</b>だけに絞ったもの。興味あり＝予約ボタンを1回以上押した、またはメニュー系ボタンを2種類以上押した（いろいろ見て回った）人。興味が強い順に並びます。</div>
+      <div class="ex">「気になってはいるのに、話しかけてこない人」＝いちばんフォローしがいのある集団です。</div>
+    </div>
+    <div class="item">
+      <div class="t">追いかけ対象（★）</div>
+      <div class="d">予約ボタンを押し、他のボタンも2種類以上見て回ったのに、予約フォームは送っていない人。</div>
+    </div>
+    <div class="item">
+      <div class="t">アクティブ上位50/100/150人</div>
+      <div class="d">最後の動きが新しい順に上から◯人。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>記号の意味</h2>
+    <div class="item"><div class="d">✋ … ステージを手動で固定中（「（自動）」に戻すまで自動判定されない）</div></div>
+    <div class="item"><div class="d">🗣トーク: … お客さんから最後に手動トークが来た日時（ボタンタップは含まない）</div></div>
+    <div class="item"><div class="d">配信: … こちらから最後に送った日時（一斉配信＋✅記録した手動チャット）</div></div>
+    <div class="item"><div class="d">最終: … ボタンタップも含めた、お客さんの最後の動きの日時</div></div>
+    <div class="item"><div class="d">★ … 追いかけ対象／⏰ … そろそろ時期／📈 … 開封見込みスコア／🔥 … 興味の内訳</div></div>
+  </div>
+
+  <div class="card">
+    <h2>「配信」と「手動チャット」の違い</h2>
+    <div class="item">
+      <div class="t">② 送信ボタン（配信）</div>
+      <div class="d">LINEのAPIで直接送ります。<b>1人でも月200通の枠を消費</b>。大人数への一斉送信向け。</div>
+    </div>
+    <div class="item">
+      <div class="t">📋本文コピー → 公式LINEアプリで手動チャット</div>
+      <div class="d">無料（枠を使わない）。1〜数人への個別フォロー向け。相手から一度でもメッセージが来ている人にだけ送れます。</div>
+      <div class="flow">手順: リストで送る人にチェック → 📋本文コピー → 公式LINEアプリのチャットに貼り付けて送信 → 戻って「✅手動送信を記録」<br>
+      ※ ✅を押さないと、送ったことがステージや「未送信」グループに反映されません。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>データの範囲</h2>
+    <p class="note">行動ログの記録は <b>2026年7月2日</b> に始まりました。それ以前の行動は記録がないため、既存の友だちはログに現れた時点からのカウントになります。データが貯まるほど、ステージ・グループ・スコアの精度が上がります。</p>
+  </div>
+
+  <div style="margin:8px 0 20px"><a class="back" href="<?= baseUrl ?>?page=line">← 配信ページに戻る</a></div>
+</body>
+</html>
