@@ -30,8 +30,21 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
   const getTreatment = (id: string) => mockTreatments.find(t => t.id === id);
   const getStaff     = (id: string) => staff.find(s => s.id === id);
 
+  // 直近5日以内に追加された予約は太枠で表示する
+  const RECENT_DAYS = 5;
+  const isRecent = (r: ScheduleReservation) => {
+    if (!r.createdAt) return false;
+    const t = new Date(r.createdAt).getTime();
+    return !isNaN(t) && Date.now() - t < RECENT_DAYS * 24 * 60 * 60 * 1000;
+  };
+
   return (
-    <div className="overflow-auto h-full schedule-scroll print:overflow-visible">
+    <div className="flex flex-col h-full">
+      <div className="flex justify-end items-center gap-1 pb-1 pr-1 text-[10px] text-slate-500 shrink-0">
+        <span className="inline-block w-3.5 h-3.5 rounded-[3px] bg-white border-2 border-slate-700" />
+        太枠 = 直近5日で追加した予約
+      </div>
+      <div className="flex-1 overflow-auto schedule-scroll print:overflow-visible">
       <table
         className="border-collapse text-xs schedule-grid-table"
         style={{ minWidth: '1050px', tableLayout: 'fixed', width: '100%' }}
@@ -115,14 +128,17 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
                     const maxSpan   = timeSlots.length - slotIdx;
                     const rowSpan   = Math.min(reservation.durationSlots, maxSpan);
                     const bgColor   = isPending ? '#fed7aa' : (treatment?.color ?? '#f9fafb');
+                    const recent    = isRecent(reservation);
 
                     return (
                       <td
                         key={machine.id}
                         rowSpan={rowSpan}
-                        className={`border px-1 py-0.5 cursor-pointer hover:brightness-95 transition-all align-top overflow-hidden ${
-                          isPending ? 'border-orange-300' : 'border-slate-300'
-                        } ${isHour ? (isPending ? 'border-t-orange-400' : 'border-t-slate-400') : ''}`}
+                        className={`px-1 py-0.5 cursor-pointer hover:brightness-95 transition-all align-top overflow-hidden ${
+                          recent
+                            ? 'border-2 border-slate-700'
+                            : `border ${isPending ? 'border-orange-300' : 'border-slate-300'} ${isHour ? (isPending ? 'border-t-orange-400' : 'border-t-slate-400') : ''}`
+                        }`}
                         style={{ backgroundColor: bgColor, verticalAlign: 'top' }}
                         onClick={() => onReservationClick(reservation)}
                       >
@@ -172,6 +188,7 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

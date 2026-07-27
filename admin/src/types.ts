@@ -100,6 +100,7 @@ export interface ScheduleReservation {
   staffId: string;
   note: string;
   status?: string;     // 'confirmed' (default) | 'pending' (患者予約から自動作成)
+  createdAt?: string;  // ISO8601 (直近追加の太枠表示に使う)
 }
 
 // 予約表の操作履歴 (追加 / 変更 / 削除 ログ)

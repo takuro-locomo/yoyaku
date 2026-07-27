@@ -157,6 +157,37 @@ export default function ReservationModal({
             </div>
           )}
 
+          {/* Staff (術者) */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-2">術者</label>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => setStaffId('')}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border-2 ${
+                  staffId === ''
+                    ? 'border-slate-500 bg-slate-200 text-slate-800 shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
+                }`}
+              >
+                なし
+              </button>
+              {staff.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => setStaffId(s.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border-2 ${
+                    staffId === s.id
+                      ? 'border-slate-500 text-slate-800 shadow-sm'
+                      : 'border-transparent bg-slate-100 text-slate-500 hover:border-slate-300'
+                  }`}
+                  style={staffId === s.id ? { backgroundColor: s.color } : {}}
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Duration buttons */}
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-2">所要時間</label>

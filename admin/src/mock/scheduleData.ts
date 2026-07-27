@@ -33,6 +33,14 @@ export const MACHINE_AREAS: MachineArea[] = [
     ],
   },
   {
+    id: 'area-seikei',
+    name: '整形診察室',
+    areaColor: '#d9f99d',
+    machines: [
+      { id: 'm-sei', name: '診察', treatmentIds: ['t-17'] },
+    ],
+  },
+  {
     id: 'area-1f-frac',
     name: '1F',
     areaColor: '#fef9c3',
@@ -68,18 +76,22 @@ const MACHINE_TREATMENT_RULES: Array<{ keywords: string[]; ids: string[] }> = [
   { keywords: ['Vビーム', 'スペクトラ', 'マイセル'], ids: ['t-20', 't-15', 't-19', 't-05'] },
   { keywords: ['BTX', 'BNLS'],                       ids: ['t-06', 't-07', 't-08', 't-17'] },
   { keywords: ['モザイク', 'ヒーライト'],             ids: ['t-10', 't-11'] },
+  { keywords: ['診察'],                              ids: ['t-17'] },
 ];
 
 /**
- * エリア配列を「2F系は右端」になるよう並べ替える。
- * GAS API の返却順（スプレッドシート順）に依存しないようフロントで正規化する。
+ * エリア配列の表示順を正規化する（GAS API の返却順＝シート順に依存しない）。
+ * 既知エリアは AREA_ORDER の順、未知エリアはその後ろ、2F系は右端。
  */
+const AREA_ORDER = ['1F脱毛エリア', 'Ope室', '診察室', '整形診察室', '1F'];
+
 export function sortMachineAreas(areas: MachineArea[]): MachineArea[] {
-  return [...areas].sort((a, b) => {
-    const a2f = a.name.includes('2F') ? 1 : 0;
-    const b2f = b.name.includes('2F') ? 1 : 0;
-    return a2f - b2f;
-  });
+  const rank = (a: MachineArea) => {
+    const i = AREA_ORDER.indexOf(a.name);
+    if (i !== -1) return i;
+    return a.name.includes('2F') ? 100 : AREA_ORDER.length;
+  };
+  return [...areas].sort((a, b) => rank(a) - rank(b));
 }
 
 /**
