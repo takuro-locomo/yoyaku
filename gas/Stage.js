@@ -78,6 +78,19 @@ const Stage = (() => {
     return map;
   }
 
+  /** {userId: Date} 「手動チャット」として記録された最後の送信日時 */
+  function getLastManualSendMap() {
+    var sheet = _sendHistSheet();
+    var map = {};
+    if (sheet.getLastRow() < 2) return map;
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues().forEach(function (r) {
+      var date = r[0], userId = r[1], group = String(r[3] || '');
+      if (!userId || !(date instanceof Date) || group !== '手動チャット') return;
+      if (!map[userId] || date > map[userId]) map[userId] = date;
+    });
+    return map;
+  }
+
   // -------------------------------------------------------------------------
   // 自動ステージ判定
   // -------------------------------------------------------------------------
@@ -166,6 +179,7 @@ const Stage = (() => {
     compute: compute,
     getManualMap: getManualMap,
     getLastSendMap: getLastSendMap,
+    getLastManualSendMap: getLastManualSendMap,
     setManual: setManual,
     recordSends: recordSends,
   };

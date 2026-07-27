@@ -112,7 +112,7 @@ function _route(action, params) {
 
     // --- LINE追いかけ配信 (PIN必須) ---
     case 'getLineFollowUpList':
-      return _buildResponse({ success: true, data: FollowUp.getList(params.pin, params.group) });
+      return _buildResponse({ success: true, data: FollowUp.getList(params.pin, params.group, params.excludeManualDays) });
 
     case 'sendLineFollowUp':
       return _buildResponse({ success: true, data: FollowUp.send(params.text, params.pin,

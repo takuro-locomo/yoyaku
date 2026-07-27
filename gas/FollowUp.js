@@ -176,7 +176,7 @@ const FollowUp = (() => {
    * group: 'followup'（★のみ・現行条件） / 'top50' / 'top100' / 'top150'
    *        （top系＝ブロック以外を最終アクティブの新しい順に上位N人）
    */
-  function getList(pin, group) {
+  function getList(pin, group, excludeManualDays) {
     _checkPin(pin);
     group = GROUPS[group] ? group : 'followup';
     var rows = _rows();
@@ -306,6 +306,20 @@ const FollowUp = (() => {
     } else {
       picked = alive.slice(0, g.n);   // サマリーは最終アクティブ降順
     }
+    // オプション: ◯日以内に手動チャットを送った（✅記録済みの）人をどのグループからも除く
+    var excludedManual = 0;
+    excludeManualDays = Number(excludeManualDays) || 0;
+    if (excludeManualDays > 0) {
+      var manualSendMap = Stage.getLastManualSendMap();
+      var exCutoffMs = Date.now() - excludeManualDays * 86400000;
+      var beforeN = picked.length;
+      picked = picked.filter(function (r) {
+        var d = manualSendMap[r[COL.userId]];
+        return !(d && d.getTime() >= exCutoffMs);
+      });
+      excludedManual = beforeN - picked.length;
+    }
+
     var users = picked.map(_toUser);
     users.forEach(function (u) {
       if (dueInfo[u.userId]) u.due = dueInfo[u.userId];
@@ -318,6 +332,7 @@ const FollowUp = (() => {
       groupStage: g.stage || '',   // ステージ別グループのときのステージ名
       totalLogged: alive.length,   // 母数（ログに現れたブロック以外の全員）
       count: picked.length,
+      excludedManual: excludedManual,   // 手動送信済みとして除外した人数
       users: users,
       stageCounts: _stageCounts(rows),
       stages: Stage.STAGES,
@@ -462,7 +477,7 @@ const FollowUp = (() => {
 })();
 
 // --- スマホ用ページ(?page=line / ?page=report)の google.script.run から呼ばれる ---
-function lineConsoleGetList(pin, group) { return FollowUp.getList(pin, group); }
+function lineConsoleGetList(pin, group, excludeManualDays) { return FollowUp.getList(pin, group, excludeManualDays); }
 function lineConsoleGetReport(pin) { return FollowUp.getReport(pin); }
 function lineConsoleSend(text, pin, userIds, groupLabel) { return FollowUp.send(text, pin, userIds, groupLabel); }
 function lineConsoleSetStage(pin, userId, name, stage, memo) { return FollowUp.setStage(pin, userId, name, stage, memo); }

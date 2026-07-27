@@ -99,6 +99,10 @@
         <option value="top150">アクティブ上位150人</option>
       </optgroup>
     </select>
+    <label style="font-weight:normal;font-size:13px;display:block;margin-top:8px">
+      <input type="checkbox" id="exManual" style="width:18px;height:18px;vertical-align:-4px">
+      1週間以内に手動送信した人を除く
+    </label>
     <button class="gray" id="btnList" onclick="loadList()">① リストを更新して表示</button>
     <div id="listArea">
       <div class="count" id="countLine"></div>
@@ -380,8 +384,9 @@
           quotaLine = '<br><span' + warn + '>今月の配信: ' + quota.used + '/' + quota.limit
             + '通（残り ' + quota.remaining + '通）</span>';
         }
+        var exLine = r.excludedManual ? '（手動送信済み ' + r.excludedManual + '人を除外）' : '';
         document.getElementById('countLine').innerHTML =
-          '<b>' + r.count + '人</b>（' + esc(r.groupLabel) + '）／ログに記録済み: ' + r.totalLogged + '人' + quotaLine;
+          '<b>' + r.count + '人</b>（' + esc(r.groupLabel) + '）' + exLine + '／ログに記録済み: ' + r.totalLogged + '人' + quotaLine;
         if (!users.length) {
           el.innerHTML = '<p class="ok">このグループは現在0人です。</p>';
           updateSendBtn();
@@ -412,7 +417,8 @@
         document.getElementById('btnList').disabled = false;
         el.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
       })
-      .lineConsoleGetList(pin(), document.getElementById('group').value);
+      .lineConsoleGetList(pin(), document.getElementById('group').value,
+        document.getElementById('exManual').checked ? 7 : 0);
   }
 
   function doSend() {
