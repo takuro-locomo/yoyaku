@@ -47,6 +47,10 @@ const FollowUp = (() => {
     notalk_1w:  { label: '1週間以上 客からトークなし', notalkDays: 7 },
     notalk_1m:  { label: '1ヶ月以上 客からトークなし', notalkDays: 30 },
     notalk_3m:  { label: '3ヶ月以上 客からトークなし', notalkDays: 90 },
+    // 興味あり（予約ボタンを押した or ボタン2種類以上）なのに客からトークがない人
+    notalk_hot_1w: { label: '興味あり＆1週間以上 客からトークなし', notalkDays: 7,  hot: true },
+    notalk_hot_2w: { label: '興味あり＆2週間以上 客からトークなし', notalkDays: 14, hot: true },
+    notalk_hot_1m: { label: '興味あり＆1ヶ月以上 客からトークなし', notalkDays: 30, hot: true },
     // ステージ別
     stage_new:       { label: 'ステージ: 新規',     stage: '新規' },
     stage_untouched: { label: 'ステージ: 反応待ち', stage: '反応待ち' },
@@ -182,6 +186,7 @@ const FollowUp = (() => {
     var picked;
     var dueInfo = {};      // userId -> 'そろそろ' の説明文
     var engagedInfo = {};  // userId -> '📈スコア◯…' の説明文
+    var hotInfo = {};      // userId -> '🔥興味あり' の説明文
     if (g.stage) {
       // ステージ別。「対象外」だけはブロック済みも含めて表示（確認用）
       var base = (g.stage === '対象外') ? rows : alive;
@@ -242,12 +247,42 @@ const FollowUp = (() => {
         var ltDate = (lt instanceof Date) ? lt : new Date(lt);
         return !isNaN(ltDate.getTime()) && ltDate.getTime() < cutoffTMs;
       });
-      // トークが古い順（一度もない人が先頭）
-      picked.sort(function (a, b) {
-        var da = a[COL.lastTalk] instanceof Date ? a[COL.lastTalk].getTime() : 0;
-        var db = b[COL.lastTalk] instanceof Date ? b[COL.lastTalk].getTime() : 0;
-        return da - db;
-      });
+      if (g.hot) {
+        // 興味あり = 予約ボタン1回以上 or メニュー系ボタン2種類以上
+        // （サマリーの列5〜10 = 予約/キャンペーン/施術メニュー/よくある質問/アクセス/HP）
+        picked = picked.filter(function (r) {
+          var reserve = Number(r[5]) || 0;
+          var kinds = 0;
+          for (var c = 5; c <= 10; c++) if ((Number(r[c]) || 0) > 0) kinds++;
+          if (reserve === 0 && kinds < 2) return false;
+          var parts = [];
+          if (reserve > 0) parts.push('予約ボタン' + reserve + '回');
+          if (kinds >= 2) parts.push('ボタン' + kinds + '種');
+          hotInfo[r[COL.userId]] = parts.join('・');
+          return true;
+        });
+        // 興味の強い順（予約ボタン回数→ボタン種類数→トークが古い順）
+        picked.sort(function (a, b) {
+          var ra = Number(a[5]) || 0, rb = Number(b[5]) || 0;
+          if (rb !== ra) return rb - ra;
+          var ka = 0, kb = 0;
+          for (var c = 5; c <= 10; c++) {
+            if ((Number(a[c]) || 0) > 0) ka++;
+            if ((Number(b[c]) || 0) > 0) kb++;
+          }
+          if (kb !== ka) return kb - ka;
+          var da = a[COL.lastTalk] instanceof Date ? a[COL.lastTalk].getTime() : 0;
+          var db = b[COL.lastTalk] instanceof Date ? b[COL.lastTalk].getTime() : 0;
+          return da - db;
+        });
+      } else {
+        // トークが古い順（一度もない人が先頭）
+        picked.sort(function (a, b) {
+          var da = a[COL.lastTalk] instanceof Date ? a[COL.lastTalk].getTime() : 0;
+          var db = b[COL.lastTalk] instanceof Date ? b[COL.lastTalk].getTime() : 0;
+          return da - db;
+        });
+      }
     } else if (g.nosendDays) {
       // 一定期間こちらが送信していない人（対象外ステージは除外）
       var cutoff = new Date();
@@ -275,6 +310,7 @@ const FollowUp = (() => {
     users.forEach(function (u) {
       if (dueInfo[u.userId]) u.due = dueInfo[u.userId];
       if (engagedInfo[u.userId]) u.engage = engagedInfo[u.userId];
+      if (hotInfo[u.userId]) u.hot = hotInfo[u.userId];
     });
     return {
       group: group,

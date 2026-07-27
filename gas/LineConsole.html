@@ -85,6 +85,9 @@
         <option value="notalk_1w">1週間以上 客からトークなし</option>
         <option value="notalk_1m">1ヶ月以上 客からトークなし</option>
         <option value="notalk_3m">3ヶ月以上 客からトークなし</option>
+        <option value="notalk_hot_1w">🔥興味あり＆1週間以上トークなし</option>
+        <option value="notalk_hot_2w">🔥興味あり＆2週間以上トークなし</option>
+        <option value="notalk_hot_1m">🔥興味あり＆1ヶ月以上トークなし</option>
       </optgroup>
       <optgroup label="従来グループ">
         <option value="followup" selected>追いかけ対象（色々見て予約ボタン→未予約）</option>
@@ -390,7 +393,8 @@
             + (u.lastSend ? '／配信: ' + esc(u.lastSend) : '')
             + (u.star ? '／★追いかけ' : '')
             + (u.due ? '／⏰' + esc(u.due) : '')
-            + (u.engage ? '／📈' + esc(u.engage) : '');
+            + (u.engage ? '／📈' + esc(u.engage) : '')
+            + (u.hot ? '／🔥' + esc(u.hot) : '');
           html += '<div class="member"><input type="checkbox" id="cb_' + i + '"' + defaultChecked + ' onchange="updateSendBtn()">'
             + '<div class="body"><div>' + esc(u.name)
             + ' <span class="badge st-' + esc(u.stage) + '">' + (u.stageManual ? '✋' : '') + esc(u.stage) + '</span></div>'
