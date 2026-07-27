@@ -127,7 +127,8 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
                     const staff     = getStaff(reservation.staffId);
                     const maxSpan   = timeSlots.length - slotIdx;
                     const rowSpan   = Math.min(reservation.durationSlots, maxSpan);
-                    const bgColor   = isPending ? '#fed7aa' : (treatment?.color ?? '#f9fafb');
+                    // マスの色は担当者の色（担当未設定はデフォルトの無色）。仮予約はオレンジ優先
+                    const bgColor   = isPending ? '#fed7aa' : (staff?.color ?? '#f9fafb');
                     const recent    = isRecent(reservation);
 
                     return (
@@ -155,10 +156,7 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
                             {treatment?.shortName ?? (isPending ? '未確定' : '')}
                           </div>
                           {staff && (
-                            <span
-                              className="inline-block text-[8px] px-1 rounded-sm text-slate-700 font-medium mt-0.5 truncate max-w-full"
-                              style={{ backgroundColor: staff.color }}
-                            >
+                            <span className="inline-block text-[8px] px-1 rounded-sm text-slate-700 font-medium mt-0.5 truncate max-w-full bg-white/60">
                               {staff.name}
                             </span>
                           )}
