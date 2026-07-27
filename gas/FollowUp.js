@@ -21,9 +21,9 @@ const FollowUp = (() => {
   const COL = {
     userId: 0, name: 1, last: 3, total: 4, reserveBtn: 5,
     cv: 12, blocked: 13, level: 14, interest: 15, followUp: 16,
-    stage: 17, lastSend: 18, stageMemo: 19, stageManual: 20,
+    stage: 17, lastSend: 18, stageMemo: 19, stageManual: 20, lastTalk: 21,
   };
-  const NUM_COLS = 21;
+  const NUM_COLS = 22;
 
   const GROUPS = {
     engaged:      { label: '開封見込み順（今日送った人は除外）', excludeDays: 1 },
@@ -43,6 +43,10 @@ const FollowUp = (() => {
     nosend_1m:  { label: '1ヶ月以上 未送信', nosendDays: 30 },
     nosend_2m:  { label: '2ヶ月以上 未送信', nosendDays: 60 },
     nosend_3m:  { label: '3ヶ月以上 未送信', nosendDays: 90 },
+    // 客からの手動トーク（自由入力・スタンプ等。ボタンタップは含まない）が途絶えている人
+    notalk_1w:  { label: '1週間以上 客からトークなし', notalkDays: 7 },
+    notalk_1m:  { label: '1ヶ月以上 客からトークなし', notalkDays: 30 },
+    notalk_3m:  { label: '3ヶ月以上 客からトークなし', notalkDays: 90 },
     // ステージ別
     stage_new:       { label: 'ステージ: 新規',     stage: '新規' },
     stage_untouched: { label: 'ステージ: 反応待ち', stage: '反応待ち' },
@@ -89,6 +93,7 @@ const FollowUp = (() => {
       star: r[COL.followUp] === '★',
       stage: r[COL.stage] || '',
       lastSend: _fmt(r[COL.lastSend]),
+      lastTalk: _fmt(r[COL.lastTalk]),
       stageMemo: r[COL.stageMemo] || '',
       stageManual: r[COL.stageManual] === 1,
     };
@@ -224,6 +229,25 @@ const FollowUp = (() => {
       });
       picked = alive.filter(function (r) { return dueInfo[r[COL.userId]] !== undefined; });
       picked.sort(function (a, b) { return order[a[COL.userId]] - order[b[COL.userId]]; });
+    } else if (g.notalkDays) {
+      // 客からの手動トーク（ボタンタップ以外）が一定期間ない人。
+      // 一度もトークがない人も含める（対象外ステージは除外）
+      var cutoffT = new Date();
+      cutoffT.setDate(cutoffT.getDate() - g.notalkDays);
+      var cutoffTMs = cutoffT.getTime();
+      picked = alive.filter(function (r) {
+        if (r[COL.stage] === '対象外') return false;
+        var lt = r[COL.lastTalk];
+        if (!lt || lt === '') return true;   // 一度も手動トークがない人
+        var ltDate = (lt instanceof Date) ? lt : new Date(lt);
+        return !isNaN(ltDate.getTime()) && ltDate.getTime() < cutoffTMs;
+      });
+      // トークが古い順（一度もない人が先頭）
+      picked.sort(function (a, b) {
+        var da = a[COL.lastTalk] instanceof Date ? a[COL.lastTalk].getTime() : 0;
+        var db = b[COL.lastTalk] instanceof Date ? b[COL.lastTalk].getTime() : 0;
+        return da - db;
+      });
     } else if (g.nosendDays) {
       // 一定期間こちらが送信していない人（対象外ステージは除外）
       var cutoff = new Date();

@@ -25,8 +25,15 @@ const SegmentSummary = (() => {
     '予約', 'キャンペーン', '施術メニュー', 'よくある質問', 'アクセス', 'HP',
     '自由入力', 'CV回数(フォーム返信)', 'ブロック',
     'アクティブ度', '興味(最多ボタン)', '追いかけ対象(予約ボタン→CVなし)',
-    'ステージ', '最終配信', 'ステージメモ', 'ステージ手動',
+    'ステージ', '最終配信', 'ステージメモ', 'ステージ手動', '最終手動トーク',
   ];
+
+  /** 客が「自分で」送ってきたか（リッチメニューのボタン自動送信テキストは除く） */
+  function _isManualTalk(category) {
+    return category === '自由入力'
+      || category === '★予約フォーム返信(CV)'
+      || String(category || '').indexOf('受信:') === 0;   // スタンプ・画像など
+  }
 
   function update() {
     var ss = SpreadsheetApp.openById(
@@ -45,12 +52,13 @@ const SegmentSummary = (() => {
       if (!u) {
         u = users[userId] = {
           name: '', first: date, last: date, total: 0,
-          buttons: {}, free: 0, cv: 0, blocked: false,
+          buttons: {}, free: 0, cv: 0, blocked: false, lastManual: null,
         };
       }
       if (name) u.name = name;
       if (date < u.first) u.first = date;
       if (date > u.last) u.last = date;
+      if (_isManualTalk(category) && (!u.lastManual || date > u.lastManual)) u.lastManual = date;
       u.total++;
       if (category === 'ブロック/削除') u.blocked = true;
       if (category === '友だち追加') u.blocked = false; // 再追加
@@ -109,7 +117,7 @@ const SegmentSummary = (() => {
       ].concat(btnCounts).concat([
         u.free, u.cv, u.blocked ? 1 : '',
         level, maxBtn, followUp,
-        stage, lastSend || '', manual ? manual.memo : '', manual ? 1 : '',
+        stage, lastSend || '', manual ? manual.memo : '', manual ? 1 : '', u.lastManual || '',
       ]);
     });
 
