@@ -113,7 +113,11 @@ export default function Schedule() {
     onSuccess: () => setError(null),
   };
 
-  const machineAreas  = sortMachineAreas(masters?.machineAreas ?? MACHINE_AREAS);
+  // 予約表に表示しない機械（GASのroomsシートに残っていても列を出さない）
+  const HIDDEN_MACHINE_KEYWORDS = ['メディオスター'];
+  const machineAreas  = sortMachineAreas(masters?.machineAreas ?? MACHINE_AREAS)
+    .map(a => ({ ...a, machines: a.machines.filter(m => !HIDDEN_MACHINE_KEYWORDS.some(k => m.name.includes(k))) }))
+    .filter(a => a.machines.length > 0);
   const scheduleStaff = masters?.staff ?? mockScheduleStaff;
   const allMachines   = machineAreas.flatMap(a => a.machines);
   const timeSlots     = period === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;

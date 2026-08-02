@@ -47,7 +47,14 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
       <div className="flex-1 overflow-auto schedule-scroll print:overflow-visible">
       <table
         className="border-collapse text-xs schedule-grid-table"
-        style={{ minWidth: '1050px', tableLayout: 'fixed', width: '100%' }}
+        style={{
+          minWidth: '1050px',
+          tableLayout: 'fixed',
+          width: '100%',
+          // A4縦印刷時の行高。印刷可能高さ(zoom 0.68換算で約1350px)を行数で割り、
+          // 午前/午後どちらの部でも下余白が約2cmになるようにする（画面表示には影響しない）
+          ['--print-row-h' as string]: `${Math.floor(1350 / timeSlots.length)}px`,
+        }}
       >
         <colgroup>
           <col style={{ width: '52px' }} /> {/* time column */}
@@ -161,7 +168,7 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
                             </span>
                           )}
                           {reservation.note && (
-                            <div className="text-[8px] text-slate-400 truncate mt-0.5">
+                            <div className="res-note text-[11px] text-slate-600 whitespace-normal break-words leading-tight mt-0.5">
                               {reservation.note}
                             </div>
                           )}

@@ -45,7 +45,7 @@ export const MACHINE_AREAS: MachineArea[] = [
     name: '1F',
     areaColor: '#fef9c3',
     machines: [
-      { id: 'm-moz', name: 'モザイク\nヒーライト', treatmentIds: ['t-10', 't-11'] },
+      { id: 'm-moz', name: 'モザイク\nヒーライト', treatmentIds: ['t-10', 't-11', 't-18', 't-21', 't-22'] },
     ],
   },
   {
@@ -61,7 +61,6 @@ export const MACHINE_AREAS: MachineArea[] = [
     name: '2F',
     areaColor: '#ede9fe',
     machines: [
-      { id: 'm-med', name: 'メディオスター' },
       { id: 'm-sp2', name: 'スペクトラ' },
       { id: 'm-art', name: 'アートメイク' },
       { id: 'm-met', name: 'メタトロン' },
@@ -75,7 +74,7 @@ export const MACHINE_AREAS: MachineArea[] = [
 const MACHINE_TREATMENT_RULES: Array<{ keywords: string[]; ids: string[] }> = [
   { keywords: ['Vビーム', 'スペクトラ', 'マイセル'], ids: ['t-20', 't-15', 't-19', 't-05'] },
   { keywords: ['BTX', 'BNLS'],                       ids: ['t-06', 't-07', 't-08', 't-17'] },
-  { keywords: ['モザイク', 'ヒーライト'],             ids: ['t-10', 't-11'] },
+  { keywords: ['モザイク', 'ヒーライト'],             ids: ['t-10', 't-11', 't-18', 't-21', 't-22'] },
   { keywords: ['診察'],                              ids: ['t-17'] },
 ];
 
@@ -147,6 +146,8 @@ export const mockTreatments: Treatment[] = [
   { id: 't-18', name: 'ケミカルピーリング',         shortName: 'ピーリング',  defaultDurationSlots: 2,  color: '#fce7f3' },
   { id: 't-19', name: 'マイセル',                  shortName: 'マイセル',    defaultDurationSlots: 2,  color: '#ffe4e6' },
   { id: 't-20', name: 'エコ2',                     shortName: 'エコ2',       defaultDurationSlots: 2,  color: '#ffd6e0' },
+  { id: 't-21', name: '幹細胞',                    shortName: '幹細胞',      defaultDurationSlots: 2,  color: '#fde68a' },
+  { id: 't-22', name: 'ビタミンC',                 shortName: 'ビタミンC',   defaultDurationSlots: 2,  color: '#fef08a' },
 ];
 
 // ---------------------------------------------------------------------------

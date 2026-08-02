@@ -47,4 +47,18 @@
   .schedule-grid-table th {
     padding: 1px 2px !important;
   }
+
+  /*
+   * 行高を印刷時だけ可変にし、A4縦の下余白が約2cmになるよう調整する。
+   * --print-row-h は ScheduleGrid が「約1350px ÷ 行数」で算出
+   * (時間セルは rowspan されないため、時間セルの高さ＝行の高さになる)。
+   */
+  .schedule-grid-table tbody td:first-child {
+    height: var(--print-row-h, 50px) !important;
+  }
+
+  /* マス内コメント(備考)は印刷でも読める大きさにする */
+  .res-note {
+    font-size: 13px !important;
+  }
 }
