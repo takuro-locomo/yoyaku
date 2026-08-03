@@ -28,8 +28,7 @@
 
   /*
    * 機械列が多くA4縦には横幅が収まらないため zoom でスケールダウン。
-   * 1000px 前後のテーブル幅 × 0.68 ≈ 680px → A4縦の印刷可能幅(約730px)に収まる。
-   * 午前16スロット: 行高合計 約800px × 0.68 ≈ 544px → A4縦の高さに収まる。
+   * テーブル幅 1050px × 0.68 ≈ 714px → A4縦の印刷可能幅(8mm余白で約714px)にちょうど収まる。
    */
   .schedule-scroll {
     overflow: visible !important;
@@ -41,6 +40,8 @@
     font-size: 7pt !important;
     width: 100% !important;
     min-width: unset !important;
+    /* 高さもA4を使い切るよう固定。行高の合計で決まるので table-layout は fixed のまま */
+    table-layout: fixed !important;
   }
 
   .schedule-grid-table td,
@@ -49,16 +50,47 @@
   }
 
   /*
-   * 行高を印刷時だけ可変にし、A4縦の下余白が約2cmになるよう調整する。
-   * --print-row-h は ScheduleGrid が「約1350px ÷ 行数」で算出
-   * (時間セルは rowspan されないため、時間セルの高さ＝行の高さになる)。
+   * 印刷時の行高。A4縦・余白8mm の高さ約281mm を zoom 0.68 で割り戻した約1562px から
+   * ヘッダー分を引いた値を行数で割って ScheduleGrid が --print-row-h を算出している。
+   * 時間セルは rowspan されないため、時間セルの高さ＝その行の高さになる。
    */
   .schedule-grid-table tbody td:first-child {
     height: var(--print-row-h, 50px) !important;
   }
 
+  /*
+   * マス内容の高さも印刷用の行高に合わせて計算し直す。
+   * これをしないと画面用の 50px 基準のままとなり、印刷時にマスの下半分が空いてしまう。
+   */
+  .schedule-grid-table {
+    --cell-h: var(--print-row-h, 50px);
+  }
+
   /* マス内コメント(備考)は印刷でも読める大きさにする */
   .res-note {
-    font-size: 13px !important;
+    font-size: 11px !important;
   }
+
+  /* 印刷では改ページさせない（1日分をA4一枚に収める） */
+  .schedule-grid-table tr,
+  .schedule-grid-table td,
+  .schedule-grid-table th {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
+
+/* ── 予約マスの中身 ─────────────────────────────────────────────────────
+ * コメント(.res-note)が長くても行の高さが変わらないよう、
+ * マスの中身は固定高のコンテナに入れて、あふれた分は隠す。
+ * 隠れた全文は td の title 属性（マウスオーバー）で読める。
+ */
+.res-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+.res-note {
+  overflow: hidden;
+  min-height: 0;
 }

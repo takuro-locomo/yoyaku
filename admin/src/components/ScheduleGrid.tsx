@@ -38,9 +38,20 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
     return !isNaN(t) && Date.now() - t < RECENT_DAYS * 24 * 60 * 60 * 1000;
   };
 
+  // 1行あたりの高さ（px）。コメントの長短で表の大きさが変わらないよう固定する。
+  const ROW_H = 50;
+
+  /*
+   * 印刷時の行高。A4縦・余白8mm の印刷可能領域は約 194mm × 281mm。
+   * ヘッダー2行(約34px)と凡例(約16px)を差し引いた残りを行数で割る。
+   * zoom 0.68 換算なので、CSSピクセル換算の使用可能高さは 281mm ≒ 1062px → 1062 / 0.68 ≒ 1562px。
+   * そこからヘッダー等 50px を引いた 1512px を行数で割り、A4一枚を隙間なく使い切る。
+   */
+  const PRINT_ROW_H = Math.floor((1512 - 50) / timeSlots.length);
+
   return (
     <div className="flex flex-col h-full">
-      <div className="flex justify-end items-center gap-1 pb-1 pr-1 text-[10px] text-slate-500 shrink-0">
+      <div className="flex justify-end items-center gap-1 pb-1 pr-1 text-[10px] text-slate-500 shrink-0 print:hidden">
         <span className="inline-block w-3.5 h-3.5 rounded-[3px] bg-white border-2 border-slate-700" />
         太枠 = 直近5日で追加した予約
       </div>
@@ -51,9 +62,10 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
           minWidth: '1050px',
           tableLayout: 'fixed',
           width: '100%',
-          // A4縦印刷時の行高。印刷可能高さ(zoom 0.68換算で約1350px)を行数で割り、
-          // 午前/午後どちらの部でも下余白が約2cmになるようにする（画面表示には影響しない）
-          ['--print-row-h' as string]: `${Math.floor(1350 / timeSlots.length)}px`,
+          ['--row-h' as string]: `${ROW_H}px`,
+          ['--print-row-h' as string]: `${PRINT_ROW_H}px`,
+          // マス内容の高さ計算に使う。印刷時は index.css で --print-row-h に差し替わる
+          ['--cell-h' as string]: `${ROW_H}px`,
         }}
       >
         <colgroup>
@@ -114,7 +126,7 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
                       ? 'border-slate-400 bg-slate-200 font-bold text-slate-700 border-t-2'
                       : 'border-slate-200 bg-slate-50 text-slate-400'
                   }`}
-                  style={{ height: '50px' }}
+                  style={{ height: 'var(--row-h)' }}
                 >
                   {displayTime}
                 </td>
@@ -149,8 +161,16 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
                         }`}
                         style={{ backgroundColor: bgColor, verticalAlign: 'top' }}
                         onClick={() => onReservationClick(reservation)}
+                        title={reservation.note || undefined}
                       >
-                        <div className="leading-tight overflow-hidden">
+                        {/*
+                          マスの中身は「行高 × rowSpan」を超えないよう固定し、あふれたら隠す。
+                          こうしないとコメントが長いときに行が伸び、表全体の大きさが変わってしまう。
+                        */}
+                        <div
+                          className="res-cell leading-tight overflow-hidden"
+                          style={{ height: `calc(var(--cell-h) * ${rowSpan} - 6px)` }}
+                        >
                           <div className="flex items-center gap-0.5">
                             {isPending && (
                               <span className="shrink-0 text-[8px] font-bold bg-orange-500 text-white px-1 rounded-sm leading-tight">仮</span>
