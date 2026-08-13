@@ -61,9 +61,7 @@
   <div class="navlink"><a href="<?= baseUrl ?>?page=line">← 配信・ステージ管理へ</a></div>
 
   <div class="card">
-    <label>PIN（暗証番号）</label>
-    <input type="password" id="pin" inputmode="numeric" placeholder="PINを入力">
-    <button id="btnLoad" onclick="loadReport()">レポートを表示</button>
+    <button id="btnLoad" onclick="loadReport()">最新に更新</button>
     <div id="err"></div>
   </div>
 
@@ -111,9 +109,8 @@
   </div>
 
 <script>
-  var pinEl = document.getElementById('pin');
-  pinEl.value = localStorage.getItem('linePin') || '';
-  function pin() { localStorage.setItem('linePin', pinEl.value); return pinEl.value; }
+  function pin() { return ''; }  // PIN廃止（サーバー側引数の互換用）
+  loadReport();  // 開いたら自動で読み込む
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   // 差分表示: upGood=増えたら良い指標か（ブロックはfalse）

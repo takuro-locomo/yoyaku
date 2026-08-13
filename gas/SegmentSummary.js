@@ -25,7 +25,7 @@ const SegmentSummary = (() => {
     '予約', 'キャンペーン', '施術メニュー', 'よくある質問', 'アクセス', 'HP',
     '自由入力', 'CV回数(フォーム返信)', 'ブロック',
     'アクティブ度', '興味(最多ボタン)', '追いかけ対象(予約ボタン→CVなし)',
-    'ステージ', '最終配信', 'ステージメモ', 'ステージ手動', '最終手動トーク',
+    'ステージ', '最終配信', 'ステージメモ', 'ステージ手動', '最終手動トーク', '最終予約(CV)',
   ];
 
   /** 客が「自分で」送ってきたか（リッチメニューのボタン自動送信テキストは除く） */
@@ -52,7 +52,7 @@ const SegmentSummary = (() => {
       if (!u) {
         u = users[userId] = {
           name: '', first: date, last: date, total: 0,
-          buttons: {}, free: 0, cv: 0, blocked: false, lastManual: null,
+          buttons: {}, free: 0, cv: 0, blocked: false, lastManual: null, lastCv: null,
         };
       }
       if (name) u.name = name;
@@ -62,7 +62,10 @@ const SegmentSummary = (() => {
       u.total++;
       if (category === 'ブロック/削除') u.blocked = true;
       if (category === '友だち追加') u.blocked = false; // 再追加
-      if (category === '★予約フォーム返信(CV)') u.cv++;
+      if (category === '★予約フォーム返信(CV)') {
+        u.cv++;
+        if (!u.lastCv || date > u.lastCv) u.lastCv = date;
+      }
       if (category === '自由入力') u.free++;
       if (BUTTON_COLS.indexOf(category) !== -1) {
         u.buttons[category] = (u.buttons[category] || 0) + 1;
@@ -117,7 +120,7 @@ const SegmentSummary = (() => {
       ].concat(btnCounts).concat([
         u.free, u.cv, u.blocked ? 1 : '',
         level, maxBtn, followUp,
-        stage, lastSend || '', manual ? manual.memo : '', manual ? 1 : '', u.lastManual || '',
+        stage, lastSend || '', manual ? manual.memo : '', manual ? 1 : '', u.lastManual || '', u.lastCv || '',
       ]);
     });
 

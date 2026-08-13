@@ -110,7 +110,7 @@ function _route(action, params) {
     case 'updateLineSegments':
       return _buildResponse({ success: true, data: SegmentSummary.update() });
 
-    // --- LINE追いかけ配信 (PIN必須) ---
+    // --- LINE追いかけ配信 (PIN廃止・2026-08-13) ---
     case 'getLineFollowUpList':
       return _buildResponse({ success: true, data: FollowUp.getList(params.pin, params.group, params.excludeManualDays) });
 

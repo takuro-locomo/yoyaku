@@ -46,11 +46,6 @@
   </div>
 
   <div class="card">
-    <label>PIN（暗証番号）</label>
-    <input type="password" id="pin" inputmode="numeric" placeholder="PINを入力">
-  </div>
-
-  <div class="card">
     <label>ステージボード（タップでそのステージの一覧を表示）</label>
     <div class="board" id="board"></div>
     <p class="note">新規=まだ反応なし／反応待ち=配信後まだ反応なし／反応あり=ボタン等の反応あり(未予約)／予約済み=予約フォーム返信あり／休眠=90日以上反応なし(予約済みでも落ちる=リピート再アプローチ対象)／対象外=ブロック・手動除外<br>
@@ -60,6 +55,15 @@
   <div class="card">
     <label>グループを選ぶ</label>
     <select id="group">
+      <optgroup label="🎯 目的で選ぶ（おすすめ・誤送信防止つき）">
+        <option value="purpose_first" selected>新規予約促進（予約0回の人だけ）</option>
+        <option value="purpose_interest">興味あり・未予約（予約0回＆ボタン反応あり）</option>
+        <option value="purpose_rebook_1m">再予約促進（最終予約から1ヶ月以上）</option>
+        <option value="purpose_rebook_2m">再予約促進（最終予約から2ヶ月以上）</option>
+        <option value="purpose_rebook_3m">再予約促進（最終予約から3ヶ月以上）</option>
+        <option value="purpose_loyal">ロイヤル顧客（予約2回以上）</option>
+        <option value="purpose_all">新製品・お知らせ（送信可能な全員）</option>
+      </optgroup>
       <optgroup label="一斉送信・リピート促進">
         <option value="engaged">開封見込み順（今日送った人は除外）</option>
         <option value="engaged_2d">開封見込み順（2日以内は除外）</option>
@@ -93,7 +97,7 @@
         <option value="notalk_hot_1m">🔥興味あり＆1ヶ月以上トークなし</option>
       </optgroup>
       <optgroup label="従来グループ">
-        <option value="followup" selected>追いかけ対象（色々見て予約ボタン→未予約）</option>
+        <option value="followup">追いかけ対象（色々見て予約ボタン→未予約）</option>
         <option value="top50">アクティブ上位50人</option>
         <option value="top100">アクティブ上位100人</option>
         <option value="top150">アクティブ上位150人</option>
@@ -106,6 +110,7 @@
     <button class="gray" id="btnList" onclick="loadList()">① リストを更新して表示</button>
     <div id="listArea">
       <div class="count" id="countLine"></div>
+      <div id="groupNote" style="display:none;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:8px 10px;font-size:13px;margin:8px 0;color:#92400e"></div>
       <div id="selBtns" style="display:none">
         <button class="mini" onclick="setAll(true)">全選択</button>
         <button class="mini" onclick="setAll(false)">全解除</button>
@@ -144,11 +149,9 @@
   var currentStage = '';   // いま選んでいるグループのステージ名（ステージ別のときだけ）
   var quota = null;        // 今月の配信通数 {limit, used, remaining}
   var stages = ['新規', '反応待ち', '反応あり', '予約済み', '休眠', '対象外'];
-  var pinEl = document.getElementById('pin');
-  pinEl.value = localStorage.getItem('linePin') || '';
   renderBoard(null);  // 初期表示（人数は「-」、リスト更新で埋まる）
 
-  function pin() { localStorage.setItem('linePin', pinEl.value); return pinEl.value; }
+  function pin() { return ''; }  // PIN廃止（サーバー側引数の互換用）
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function checked() {
     return users.filter(function (u, i) {
@@ -387,6 +390,13 @@
         var exLine = r.excludedManual ? '（手動送信済み ' + r.excludedManual + '人を除外）' : '';
         document.getElementById('countLine').innerHTML =
           '<b>' + r.count + '人</b>（' + esc(r.groupLabel) + '）' + exLine + '／ログに記録済み: ' + r.totalLogged + '人' + quotaLine;
+        var noteEl = document.getElementById('groupNote');
+        if (r.groupNote) {
+          noteEl.textContent = '⚠ 文面の注意: ' + r.groupNote;
+          noteEl.style.display = 'block';
+        } else {
+          noteEl.style.display = 'none';
+        }
         if (!users.length) {
           el.innerHTML = '<p class="ok">このグループは現在0人です。</p>';
           updateSendBtn();
@@ -395,14 +405,17 @@
         var html = '';
         var defaultChecked = (r.group === 'stage_archive') ? '' : ' checked';  // 対象外は送信不可なので未チェック
         users.forEach(function (u, i) {
-          var sub = '最終: ' + esc(u.lastActive)
+          var sub = '予約' + (u.cv || 0) + '回'
+            + (u.lastCv ? '(最終 ' + esc(u.lastCv) + ')' : '')
+            + '／最終: ' + esc(u.lastActive)
             + (u.lastTalk ? '／🗣トーク: ' + esc(u.lastTalk) : '')
             + (u.interest ? '／興味: ' + esc(u.interest) : '')
             + (u.lastSend ? '／配信: ' + esc(u.lastSend) : '')
             + (u.star ? '／★追いかけ' : '')
             + (u.due ? '／⏰' + esc(u.due) : '')
             + (u.engage ? '／📈' + esc(u.engage) : '')
-            + (u.hot ? '／🔥' + esc(u.hot) : '');
+            + (u.hot ? '／🔥' + esc(u.hot) : '')
+            + (u.why ? '／🎯' + esc(u.why) : '');
           html += '<div class="member"><input type="checkbox" id="cb_' + i + '"' + defaultChecked + ' onchange="updateSendBtn()">'
             + '<div class="body"><div>' + esc(u.name)
             + ' <span class="badge st-' + esc(u.stage) + '">' + (u.stageManual ? '✋' : '') + esc(u.stage) + '</span></div>'

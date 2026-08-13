@@ -6,7 +6,7 @@
  * チェックを外した人には送らない（個別送信＝月200通の節約用）。
  * ステージの手動変更・文面テンプレート・今月の残り通数表示にも対応（Stage.gs / Templates.gs）。
  *
- * 保護: ScriptProperties(LINE_CONSOLE_PIN) のPINが一致しないと一覧も送信も不可。
+ * 保護: PINは廃止（2026-08-13）。URLを知っている人だけが開ける前提の運用。
  *       「対象外」ステージ（ブロック・手動除外）には送信できない。
  * 記録: 「配信ログ」シート（1送信1行）と「配信先履歴」シート（1人1行・反応待ち判定用）。
  * 注意: 無料プランは月200通まで（1回の送信で送信人数分を消費）。残量超過は送信前にブロック。
@@ -21,11 +21,26 @@ const FollowUp = (() => {
   const COL = {
     userId: 0, name: 1, last: 3, total: 4, reserveBtn: 5,
     cv: 12, blocked: 13, level: 14, interest: 15, followUp: 16,
-    stage: 17, lastSend: 18, stageMemo: 19, stageManual: 20, lastTalk: 21,
+    stage: 17, lastSend: 18, stageMemo: 19, stageManual: 20, lastTalk: 21, lastCv: 22,
   };
-  const NUM_COLS = 22;
+  const NUM_COLS = 23;
 
   const GROUPS = {
+    // 目的別（予約回数で属性を分け、誤った訴求＝リピーターに「ぜひ一度」等を防ぐ）
+    purpose_first:    { label: '🎯新規予約促進（予約0回の人だけ）', purpose: 'first',
+      note: '全員「予約0回」の人です。「初めての方へ」「ぜひ一度お試しください」の訴求OK。' },
+    purpose_interest: { label: '🎯興味あり・未予約（予約0回＆ボタン反応あり）', purpose: 'interest',
+      note: '全員「予約0回」ですがボタンを押して興味を示した人です。あと一押しの文面（初回特典・不安解消など）が有効。' },
+    purpose_rebook_1m: { label: '🎯再予約促進（予約経験あり・最終予約から1ヶ月以上）', purpose: 'rebook', days: 30,
+      note: '全員「予約経験あり」の人です。「ぜひ一度」など新規向けの文面はNG。「またのご来院」「前回の◯◯はいかがでしたか」の訴求で。' },
+    purpose_rebook_2m: { label: '🎯再予約促進（予約経験あり・最終予約から2ヶ月以上）', purpose: 'rebook', days: 60,
+      note: '全員「予約経験あり」の人です。「ぜひ一度」など新規向けの文面はNG。「またのご来院」の訴求で。' },
+    purpose_rebook_3m: { label: '🎯再予約促進（予約経験あり・最終予約から3ヶ月以上）', purpose: 'rebook', days: 90,
+      note: '全員「予約経験あり」の人です。「ぜひ一度」など新規向けの文面はNG。お久しぶりの再来院を促す文面で。' },
+    purpose_loyal:    { label: '🎯ロイヤル顧客（予約2回以上のリピーター）', purpose: 'loyal',
+      note: '全員「予約2回以上」のリピーターです。特別感・優先案内・感謝の訴求が有効。新規向け文面はNG。' },
+    purpose_all:      { label: '🎯新製品・お知らせ（送信可能な全員）', purpose: 'all',
+      note: '新規もリピーターも混ざっています。誰が読んでも違和感のない中立な文面にしてください（「ぜひ一度」「いつもありがとう」はNG）。' },
     engaged:      { label: '開封見込み順（今日送った人は除外）', excludeDays: 1 },
     engaged_2d:   { label: '開封見込み順（2日以内に送った人は除外）', excludeDays: 2 },
     engaged_3d:   { label: '開封見込み順（3日以内に送った人は除外）', excludeDays: 3 },
@@ -62,11 +77,8 @@ const FollowUp = (() => {
 
   function _props() { return PropertiesService.getScriptProperties(); }
 
-  function _checkPin(pin) {
-    var saved = _props().getProperty('LINE_CONSOLE_PIN');
-    if (!saved) throw new Error('PINが未設定です。初回セットアップ(action=setupLineDaily)を先に実行してください。');
-    if (String(pin) !== String(saved)) throw new Error('PINが違います。');
-  }
+  // PINは廃止（引数は互換のため残す）
+  function _checkPin(pin) { }
 
   function _ss() {
     var id = _props().getProperty('LINE_ACTIVITY_LOG_SSID');
@@ -92,6 +104,8 @@ const FollowUp = (() => {
       name: r[COL.name] || '(名前なし)',
       lastActive: _fmt(r[COL.last]),
       reserveClicks: r[COL.reserveBtn] || 0,
+      cv: Number(r[COL.cv]) || 0,
+      lastCv: _fmt(r[COL.lastCv]),
       level: r[COL.level] || '',
       interest: r[COL.interest] || '',
       star: r[COL.followUp] === '★',
@@ -187,7 +201,78 @@ const FollowUp = (() => {
     var dueInfo = {};      // userId -> 'そろそろ' の説明文
     var engagedInfo = {};  // userId -> '📈スコア◯…' の説明文
     var hotInfo = {};      // userId -> '🔥興味あり' の説明文
-    if (g.stage) {
+    var purposeInfo = {};  // userId -> '🎯選定理由' の説明文
+    if (g.purpose) {
+      // 目的別: 予約回数(CV)と最終予約日で属性を分ける（対象外ステージは除外）
+      var base2 = alive.filter(function (r) { return r[COL.stage] !== '対象外'; });
+      var cvOf = function (r) { return Number(r[COL.cv]) || 0; };
+      if (g.purpose === 'first') {
+        // 一度も予約していない全員
+        picked = base2.filter(function (r) { return cvOf(r) === 0; });
+      } else if (g.purpose === 'interest') {
+        // 予約0回だが、予約ボタンを押した or ボタン2種類以上 = 興味あり
+        picked = base2.filter(function (r) {
+          if (cvOf(r) !== 0) return false;
+          var reserve = Number(r[COL.reserveBtn]) || 0;
+          var kinds = 0;
+          for (var c = 5; c <= 10; c++) if ((Number(r[c]) || 0) > 0) kinds++;
+          if (reserve === 0 && kinds < 2) return false;
+          var parts = [];
+          if (reserve > 0) parts.push('予約ボタン' + reserve + '回');
+          if (kinds >= 2) parts.push('ボタン' + kinds + '種');
+          purposeInfo[r[COL.userId]] = parts.join('・');
+          return true;
+        });
+        // 興味の強い順（予約ボタン回数→ボタン種類数）
+        picked.sort(function (a, b) {
+          var ra = Number(a[COL.reserveBtn]) || 0, rb = Number(b[COL.reserveBtn]) || 0;
+          if (rb !== ra) return rb - ra;
+          var ka = 0, kb = 0;
+          for (var c = 5; c <= 10; c++) {
+            if ((Number(a[c]) || 0) > 0) ka++;
+            if ((Number(b[c]) || 0) > 0) kb++;
+          }
+          return kb - ka;
+        });
+      } else if (g.purpose === 'rebook') {
+        // 予約経験あり＆最終予約からg.days日以上経過
+        var cutoffP = new Date();
+        cutoffP.setDate(cutoffP.getDate() - g.days);
+        var cutoffPMs = cutoffP.getTime();
+        picked = base2.filter(function (r) {
+          if (cvOf(r) < 1) return false;
+          var lc = r[COL.lastCv];
+          var lcDate = (lc instanceof Date) ? lc : new Date(lc);
+          if (!lc || lc === '' || isNaN(lcDate.getTime())) {
+            // 予約はあるが日付不明（列追加前の旧サマリー等）→ 含めて理由に明記
+            purposeInfo[r[COL.userId]] = '予約' + cvOf(r) + '回（最終予約日は不明）';
+            return true;
+          }
+          if (lcDate.getTime() >= cutoffPMs) return false;
+          purposeInfo[r[COL.userId]] = '予約' + cvOf(r) + '回・最終予約 ' + _fmt(lcDate);
+          return true;
+        });
+        // 最終予約が古い順
+        picked.sort(function (a, b) {
+          var da = a[COL.lastCv] instanceof Date ? a[COL.lastCv].getTime() : 0;
+          var db = b[COL.lastCv] instanceof Date ? b[COL.lastCv].getTime() : 0;
+          return da - db;
+        });
+      } else if (g.purpose === 'loyal') {
+        // 予約2回以上のリピーター（回数の多い順）
+        picked = base2.filter(function (r) {
+          if (cvOf(r) < 2) return false;
+          var lc2 = r[COL.lastCv];
+          purposeInfo[r[COL.userId]] = '予約' + cvOf(r) + '回'
+            + (lc2 instanceof Date ? '・最終予約 ' + _fmt(lc2) : '');
+          return true;
+        });
+        picked.sort(function (a, b) { return cvOf(b) - cvOf(a); });
+      } else {
+        // 'all': 新製品・お知らせ（送信可能な全員）
+        picked = base2;
+      }
+    } else if (g.stage) {
       // ステージ別。「対象外」だけはブロック済みも含めて表示（確認用）
       var base = (g.stage === '対象外') ? rows : alive;
       picked = base.filter(function (r) { return r[COL.stage] === g.stage; });
@@ -325,10 +410,12 @@ const FollowUp = (() => {
       if (dueInfo[u.userId]) u.due = dueInfo[u.userId];
       if (engagedInfo[u.userId]) u.engage = engagedInfo[u.userId];
       if (hotInfo[u.userId]) u.hot = hotInfo[u.userId];
+      if (purposeInfo[u.userId]) u.why = purposeInfo[u.userId];
     });
     return {
       group: group,
       groupLabel: g.label,
+      groupNote: g.note || '',   // 目的別グループの文面注意（誤送信防止）
       groupStage: g.stage || '',   // ステージ別グループのときのステージ名
       totalLogged: alive.length,   // 母数（ログに現れたブロック以外の全員）
       count: picked.length,
@@ -460,17 +547,13 @@ const FollowUp = (() => {
     return { sent: targets.length, names: names };
   }
 
-  /** 初回セットアップ: PIN保存＋毎朝6時台の自動集計トリガー作成（何度呼んでも安全） */
+  /** 初回セットアップ: 毎朝6時台の自動集計トリガー作成（何度呼んでも安全。PINは廃止） */
   function setup(pin) {
-    if (!pin) throw new Error('pin を指定してください。');
-    var saved = _props().getProperty('LINE_CONSOLE_PIN');
-    if (saved && String(pin) !== String(saved)) throw new Error('PINが違います。');
-    if (!saved) _props().setProperty('LINE_CONSOLE_PIN', String(pin));
     ScriptApp.getProjectTriggers().forEach(function (t) {
       if (t.getHandlerFunction() === 'updateLineUserSummary') ScriptApp.deleteTrigger(t);
     });
     ScriptApp.newTrigger('updateLineUserSummary').timeBased().everyDays(1).atHour(6).create();
-    return { pinSet: true, trigger: '毎日6〜7時に updateLineUserSummary を実行' };
+    return { trigger: '毎日6〜7時に updateLineUserSummary を実行' };
   }
 
   return { getList: getList, send: send, setup: setup, setStage: setStage, saveTemplate: saveTemplate, getReport: getReport, recordManual: recordManual };
@@ -484,9 +567,9 @@ function lineConsoleSetStage(pin, userId, name, stage, memo) { return FollowUp.s
 function lineConsoleSaveTemplate(pin, stage, title, body) { return FollowUp.saveTemplate(pin, stage, title, body); }
 function lineConsoleRecordManual(pin, users, text) { return FollowUp.recordManual(pin, users, text); }
 
-/** GASエディタから手動セットアップする用（'ここにPIN' を書き換えて実行） */
+/** GASエディタから手動セットアップする用 */
 function setupLineDailyFromEditor() {
-  Logger.log(JSON.stringify(FollowUp.setup('ここにPIN')));
+  Logger.log(JSON.stringify(FollowUp.setup()));
 }
 
 /** エディタから実行: 権限承認＋毎朝6時台の自動集計トリガー作成（PIN不要） */
