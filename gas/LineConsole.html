@@ -103,6 +103,21 @@
         <option value="top150">アクティブ上位150人</option>
       </optgroup>
     </select>
+    <div id="comboRows"></div>
+    <div id="comboMode" style="display:none;font-size:13px;margin-top:8px;background:#f3f4f6;border-radius:8px;padding:8px 10px">
+      <b>かけ合わせ方</b><br>
+      <label style="font-weight:normal;display:block;margin-top:4px">
+        <input type="radio" name="cmode" value="and" checked style="width:18px;height:18px;vertical-align:-4px">
+        すべての条件に当てはまる人だけ（<b>かつ</b>＝絞り込み）
+      </label>
+      <label style="font-weight:normal;display:block;margin-top:2px">
+        <input type="radio" name="cmode" value="or" style="width:18px;height:18px;vertical-align:-4px">
+        どれか1つでも当てはまる人（<b>または</b>＝合体）
+      </label>
+      <span class="note">例）「ステージ: 反応あり」かつ「1ヶ月以上 未送信」＝反応ありの人のうち、1ヶ月以上こちらから送っていない人だけ。<br>
+      ※ ステージ同士を「かつ」にすると1人も残りません（1人1ステージのため）。その場合は「または」で。</span>
+    </div>
+    <button class="mini" id="btnAddCombo" onclick="addCombo()" style="margin-top:8px">＋ 条件をかけ合わせる（かつ／または）</button>
     <label style="font-weight:normal;font-size:13px;display:block;margin-top:8px">
       <input type="checkbox" id="exManual" style="width:18px;height:18px;vertical-align:-4px">
       1週間以内に手動送信した人を除く
@@ -148,6 +163,7 @@
   var templates = [];      // 文面テンプレート（リスト更新時に取得）
   var currentStage = '';   // いま選んでいるグループのステージ名（ステージ別のときだけ）
   var quota = null;        // 今月の配信通数 {limit, used, remaining}
+  var lastGroupLabel = ''; // 直近リストの条件ラベル（かけ合わせ時は「AかつB」形式・配信ログ用）
   var stages = ['新規', '反応待ち', '反応あり', '予約済み', '休眠', '対象外'];
   renderBoard(null);  // 初期表示（人数は「-」、リスト更新で埋まる）
 
@@ -191,6 +207,38 @@
   function pickStage(groupVal) {
     document.getElementById('group').value = groupVal;
     loadList();
+  }
+
+  // ---- 条件のかけ合わせ（かつ／または） ----
+  function addCombo() {
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;gap:6px;align-items:center;margin-top:8px';
+    var sel = document.createElement('select');
+    sel.innerHTML = document.getElementById('group').innerHTML;   // メインと同じ選択肢
+    sel.style.marginTop = '0';
+    var del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'mini';
+    del.style.cssText = 'flex:none;margin:0;padding:10px 12px';
+    del.textContent = '✕';
+    del.onclick = function () { wrap.remove(); updateComboMode(); };
+    wrap.appendChild(sel);
+    wrap.appendChild(del);
+    document.getElementById('comboRows').appendChild(wrap);
+    updateComboMode();
+  }
+  function comboGroups() {
+    return Array.prototype.map.call(
+      document.querySelectorAll('#comboRows select'),
+      function (s) { return s.value; }
+    );
+  }
+  function comboMode() {
+    var el = document.querySelector('input[name=cmode]:checked');
+    return el ? el.value : 'and';
+  }
+  function updateComboMode() {
+    document.getElementById('comboMode').style.display = comboGroups().length ? 'block' : 'none';
   }
 
   function renderSendHist(items) {
@@ -377,6 +425,7 @@
         templates = r.templates || [];
         currentStage = r.groupStage || '';
         quota = r.quota || null;
+        lastGroupLabel = r.groupLabel || '';
         renderTmplSelect();
         renderBoard(r.stageCounts);
         renderSendHist(r.recentSends);
@@ -431,7 +480,8 @@
         el.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
       })
       .lineConsoleGetList(pin(), document.getElementById('group').value,
-        document.getElementById('exManual').checked ? 7 : 0);
+        document.getElementById('exManual').checked ? 7 : 0,
+        comboGroups().length ? { groups: comboGroups(), mode: comboMode() } : null);
   }
 
   function doSend() {
@@ -450,7 +500,8 @@
     if (!confirm(sel.length + '人に送信します。よろしいですか？' + quotaMsg)) return;
     document.getElementById('btnSend').disabled = true;
     res.innerHTML = '<p class="note">送信中…</p>';
-    var groupLabel = document.getElementById('group').selectedOptions[0].textContent;
+    // かけ合わせ時は「【A】かつ【B】」形式のラベルで配信ログに残す
+    var groupLabel = lastGroupLabel || document.getElementById('group').selectedOptions[0].textContent;
     google.script.run
       .withSuccessHandler(function (r) {
         updateSendBtn();

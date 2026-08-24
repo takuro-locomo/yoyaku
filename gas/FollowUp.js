@@ -3,6 +3,7 @@
  *
  * 「ユーザー別サマリー」からグループ（ステージ別6種／追いかけ★／アクティブ上位50・100・150人）
  * を作り、multicastでメッセージを直接送る。スマホ用ページ(?page=line)から操作する。
+ * グループは複数を「かつ(AND=絞り込み)」「または(OR=合体)」でかけ合わせられる（2026-08-25）。
  * チェックを外した人には送らない（個別送信＝月200通の節約用）。
  * ステージの手動変更・文面テンプレート・今月の残り通数表示にも対応（Stage.gs / Templates.gs）。
  *
@@ -186,17 +187,12 @@ const FollowUp = (() => {
   }
 
   /**
-   * グループの一覧を返す。
-   * group: 'followup'（★のみ・現行条件） / 'top50' / 'top100' / 'top150'
-   *        （top系＝ブロック以外を最終アクティブの新しい順に上位N人）
+   * 1グループぶんの対象者を抽出する（かけ合わせ配信でも使うため独立させた）。
+   * 戻り値: { picked: サマリー行の配列（そのグループの並び順）,
+   *           info: {userId: {due/engage/hot/why の説明文}} }
    */
-  function getList(pin, group, excludeManualDays) {
-    _checkPin(pin);
-    group = GROUPS[group] ? group : 'followup';
-    var rows = _rows();
-    var alive = rows.filter(function (r) { return r[COL.blocked] !== 1; });  // ブロック除外
+  function _pickGroup(group, rows, alive, quotaInfo) {
     var g = GROUPS[group];
-    var quotaInfo = _quota();   // 開封見込みの選定人数にも使うので先に1回だけ取得
     var picked;
     var dueInfo = {};      // userId -> 'そろそろ' の説明文
     var engagedInfo = {};  // userId -> '📈スコア◯…' の説明文
@@ -391,6 +387,75 @@ const FollowUp = (() => {
     } else {
       picked = alive.slice(0, g.n);   // サマリーは最終アクティブ降順
     }
+    var info = {};
+    [['due', dueInfo], ['engage', engagedInfo], ['hot', hotInfo], ['why', purposeInfo]].forEach(function (p) {
+      Object.keys(p[1]).forEach(function (id) { (info[id] = info[id] || {})[p[0]] = p[1][id]; });
+    });
+    return { picked: picked, info: info };
+  }
+
+  /**
+   * グループの一覧を返す。
+   * group: 'followup'（★のみ・現行条件） / 'top50' / 'top100' / 'top150'
+   *        （top系＝ブロック以外を最終アクティブの新しい順に上位N人）
+   * combo: {groups: ['nosend_1m', ...], mode: 'and'|'or'} を渡すと、メイングループと
+   *        追加グループを「かつ(AND=全条件を満たす人だけ)」「または(OR=どれかに当てはまる人)」でかけ合わせる。
+   */
+  function getList(pin, group, excludeManualDays, combo) {
+    _checkPin(pin);
+    group = GROUPS[group] ? group : 'followup';
+    var rows = _rows();
+    var alive = rows.filter(function (r) { return r[COL.blocked] !== 1; });  // ブロック除外
+    var quotaInfo = _quota();   // 開封見込みの選定人数にも使うので先に1回だけ取得
+
+    // かけ合わせ対象のグループ列（先頭=メイングループ。重複と不明キーは捨てる）
+    var keys = [group];
+    var mode = 'and';
+    if (combo && combo.groups && combo.groups.length) {
+      combo.groups.forEach(function (k) {
+        if (GROUPS[k] && keys.indexOf(k) === -1) keys.push(k);
+      });
+      mode = (combo.mode === 'or') ? 'or' : 'and';
+    }
+    var results = keys.map(function (k) { return _pickGroup(k, rows, alive, quotaInfo); });
+
+    var picked;
+    if (results.length === 1) {
+      picked = results[0].picked;
+    } else if (mode === 'and') {
+      // かつ: 先頭グループの並び順のまま、他の全グループにも入っている人だけ残す
+      var sets = results.slice(1).map(function (res) {
+        var s = {};
+        res.picked.forEach(function (r) { s[r[COL.userId]] = 1; });
+        return s;
+      });
+      picked = results[0].picked.filter(function (r) {
+        var id = r[COL.userId];
+        for (var i = 0; i < sets.length; i++) if (!sets[i][id]) return false;
+        return true;
+      });
+    } else {
+      // または: 先頭グループの並び順を保ち、後のグループで新たに現れた人を後ろに足す
+      var seen = {};
+      picked = [];
+      results.forEach(function (res) {
+        res.picked.forEach(function (r) {
+          var id = r[COL.userId];
+          if (!seen[id]) { seen[id] = 1; picked.push(r); }
+        });
+      });
+    }
+
+    // 選定理由の説明はグループ横断でマージ（同じ項目は先のグループを優先）
+    var info = {};
+    results.forEach(function (res) {
+      Object.keys(res.info).forEach(function (id) {
+        var dst = info[id] = info[id] || {};
+        var src = res.info[id];
+        Object.keys(src).forEach(function (k) { if (!dst[k]) dst[k] = src[k]; });
+      });
+    });
+
     // オプション: ◯日以内に手動チャットを送った（✅記録済みの）人をどのグループからも除く
     var excludedManual = 0;
     excludeManualDays = Number(excludeManualDays) || 0;
@@ -407,16 +472,29 @@ const FollowUp = (() => {
 
     var users = picked.map(_toUser);
     users.forEach(function (u) {
-      if (dueInfo[u.userId]) u.due = dueInfo[u.userId];
-      if (engagedInfo[u.userId]) u.engage = engagedInfo[u.userId];
-      if (hotInfo[u.userId]) u.hot = hotInfo[u.userId];
-      if (purposeInfo[u.userId]) u.why = purposeInfo[u.userId];
+      var m = info[u.userId];
+      if (!m) return;
+      if (m.due) u.due = m.due;
+      if (m.engage) u.engage = m.engage;
+      if (m.hot) u.hot = m.hot;
+      if (m.why) u.why = m.why;
     });
+
+    // ラベルと文面注意: かけ合わせ時は全グループぶんを連結（配信ログにも条件が残る）
+    var label = (keys.length === 1)
+      ? GROUPS[group].label
+      : '【' + keys.map(function (k) { return GROUPS[k].label; }).join((mode === 'or') ? '】または【' : '】かつ【') + '】';
+    var notes = [];
+    keys.forEach(function (k) {
+      var n = GROUPS[k].note;
+      if (n && notes.indexOf(n) === -1) notes.push(n);
+    });
+
     return {
       group: group,
-      groupLabel: g.label,
-      groupNote: g.note || '',   // 目的別グループの文面注意（誤送信防止）
-      groupStage: g.stage || '',   // ステージ別グループのときのステージ名
+      groupLabel: label,
+      groupNote: notes.join(' ／ '),   // 目的別グループの文面注意（誤送信防止）
+      groupStage: (keys.length === 1 && GROUPS[group].stage) || '',   // ステージ別グループのときのステージ名
       totalLogged: alive.length,   // 母数（ログに現れたブロック以外の全員）
       count: picked.length,
       excludedManual: excludedManual,   // 手動送信済みとして除外した人数
@@ -427,7 +505,7 @@ const FollowUp = (() => {
       quota: quotaInfo,   // {limit, used, remaining} または null
       recentSends: _recentSends(5),
       bestTimeLabel: Insights.heatmap().label,   // おすすめ配信タイム
-      dueCount: (group === 'due') ? picked.length : Insights.dueList().length,
+      dueCount: (keys.length === 1 && group === 'due') ? picked.length : Insights.dueList().length,
     };
   }
 
@@ -560,7 +638,7 @@ const FollowUp = (() => {
 })();
 
 // --- スマホ用ページ(?page=line / ?page=report)の google.script.run から呼ばれる ---
-function lineConsoleGetList(pin, group, excludeManualDays) { return FollowUp.getList(pin, group, excludeManualDays); }
+function lineConsoleGetList(pin, group, excludeManualDays, combo) { return FollowUp.getList(pin, group, excludeManualDays, combo); }
 function lineConsoleGetReport(pin) { return FollowUp.getReport(pin); }
 function lineConsoleSend(text, pin, userIds, groupLabel) { return FollowUp.send(text, pin, userIds, groupLabel); }
 function lineConsoleSetStage(pin, userId, name, stage, memo) { return FollowUp.setStage(pin, userId, name, stage, memo); }
