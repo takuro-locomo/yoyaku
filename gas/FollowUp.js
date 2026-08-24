@@ -175,6 +175,44 @@ const FollowUp = (() => {
     });
   }
 
+  /**
+   * 行動ログの「内容(テキスト)」からキーワード該当者を集める。
+   * リッチメニューの施術ボタンはテキスト送信型なので、タップ＝その文言のメッセージとしてログに残る。
+   * 予約フォーム返信(CV)は「ご希望の施術」を含む全文が残るため、予約した施術も拾える。
+   * 戻り値: {userId: {talkN, talkLast, cvN, cvLast}}（talk=CV以外のタップ・トーク）
+   */
+  function _keywordMatch(keyword) {
+    var out = {};
+    var sheet = _ss().getSheetByName('ログ');
+    if (!sheet || sheet.getLastRow() < 2) return out;
+    var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 7).getValues();
+    var kw = String(keyword).toLowerCase();
+    rows.forEach(function (r) {
+      var text = String(r[5] || '');
+      if (!text || text.toLowerCase().indexOf(kw) === -1) return;
+      var id = r[1];
+      if (!id || String(id).indexOf('U_TEST') === 0) return;
+      var e = out[id] = out[id] || { talkN: 0, talkLast: null, cvN: 0, cvLast: null };
+      var isCv = r[6] === 1 || String(r[4]) === '★予約フォーム返信(CV)';
+      if (isCv) {
+        e.cvN++;
+        if (!e.cvLast || r[0] > e.cvLast) e.cvLast = r[0];
+      } else {
+        e.talkN++;
+        if (!e.talkLast || r[0] > e.talkLast) e.talkLast = r[0];
+      }
+    });
+    return out;
+  }
+
+  // キーワード絞り込みの範囲（UIのセレクトと対応）
+  var KW_SCOPES = {
+    any:       'タップ・トーク・予約フォームのどれか',
+    talk:      'タップ・トークで触れた人',
+    talk_nocv: 'タップ・トークのみ（その施術は未予約）',
+    cv:        '予約フォームで申し込んだ人',
+  };
+
   /** 全ステージの人数（ブロック含む全員が母数） */
   function _stageCounts(rows) {
     var counts = {};
@@ -400,8 +438,10 @@ const FollowUp = (() => {
    *        （top系＝ブロック以外を最終アクティブの新しい順に上位N人）
    * combo: {groups: ['nosend_1m', ...], mode: 'and'|'or'} を渡すと、メイングループと
    *        追加グループを「かつ(AND=全条件を満たす人だけ)」「または(OR=どれかに当てはまる人)」でかけ合わせる。
+   * keyword: {text: 'ハイドロ', scope: 'any'|'talk'|'talk_nocv'|'cv'} を渡すと、
+   *          行動ログの内容にそのキーワードを含む人だけにさらに絞り込む（施術名の抽出用）。
    */
-  function getList(pin, group, excludeManualDays, combo) {
+  function getList(pin, group, excludeManualDays, combo, keyword) {
     _checkPin(pin);
     group = GROUPS[group] ? group : 'followup';
     var rows = _rows();
@@ -456,6 +496,29 @@ const FollowUp = (() => {
       });
     });
 
+    // オプション: キーワード絞り込み（例: 「ハイドロ」をタップ・トークした人／予約フォームで申し込んだ人）
+    var kwText = (keyword && keyword.text) ? String(keyword.text).trim() : '';
+    var kwScope = (keyword && KW_SCOPES[keyword.scope]) ? keyword.scope : 'any';
+    if (kwText) {
+      var kwMap = _keywordMatch(kwText);
+      picked = picked.filter(function (r) {
+        var e = kwMap[r[COL.userId]];
+        if (!e) return false;
+        if (kwScope === 'cv') return e.cvN > 0;
+        if (kwScope === 'talk') return e.talkN > 0;
+        if (kwScope === 'talk_nocv') return e.talkN > 0 && e.cvN === 0;
+        return true;   // any
+      });
+      picked.forEach(function (r) {
+        var e = kwMap[r[COL.userId]];
+        if (!e) return;
+        var parts = [];
+        if (e.talkN) parts.push('タップ・トーク' + e.talkN + '回' + (e.talkLast ? '(最終 ' + _fmt(e.talkLast) + ')' : ''));
+        if (e.cvN) parts.push('予約フォーム' + e.cvN + '回' + (e.cvLast ? '(最終 ' + _fmt(e.cvLast) + ')' : ''));
+        (info[r[COL.userId]] = info[r[COL.userId]] || {}).kw = '「' + kwText + '」' + parts.join('・');
+      });
+    }
+
     // オプション: ◯日以内に手動チャットを送った（✅記録済みの）人をどのグループからも除く
     var excludedManual = 0;
     excludeManualDays = Number(excludeManualDays) || 0;
@@ -478,12 +541,14 @@ const FollowUp = (() => {
       if (m.engage) u.engage = m.engage;
       if (m.hot) u.hot = m.hot;
       if (m.why) u.why = m.why;
+      if (m.kw) u.kw = m.kw;
     });
 
     // ラベルと文面注意: かけ合わせ時は全グループぶんを連結（配信ログにも条件が残る）
     var label = (keys.length === 1)
       ? GROUPS[group].label
       : '【' + keys.map(function (k) { return GROUPS[k].label; }).join((mode === 'or') ? '】または【' : '】かつ【') + '】';
+    if (kwText) label += ' ＋🔍「' + kwText + '」(' + KW_SCOPES[kwScope] + ')';
     var notes = [];
     keys.forEach(function (k) {
       var n = GROUPS[k].note;
@@ -638,7 +703,7 @@ const FollowUp = (() => {
 })();
 
 // --- スマホ用ページ(?page=line / ?page=report)の google.script.run から呼ばれる ---
-function lineConsoleGetList(pin, group, excludeManualDays, combo) { return FollowUp.getList(pin, group, excludeManualDays, combo); }
+function lineConsoleGetList(pin, group, excludeManualDays, combo, keyword) { return FollowUp.getList(pin, group, excludeManualDays, combo, keyword); }
 function lineConsoleGetReport(pin) { return FollowUp.getReport(pin); }
 function lineConsoleSend(text, pin, userIds, groupLabel) { return FollowUp.send(text, pin, userIds, groupLabel); }
 function lineConsoleSetStage(pin, userId, name, stage, memo) { return FollowUp.setStage(pin, userId, name, stage, memo); }

@@ -8,7 +8,7 @@
   .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
   label { font-size: 13px; font-weight: bold; color: #374151; }
   input, textarea, button, select { font-size: 16px; }
-  input[type=password], textarea, select { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; margin-top: 4px; background: #fff; }
+  input[type=password], input[type=text], textarea, select { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; margin-top: 4px; background: #fff; }
   textarea { min-height: 140px; }
   button { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: #06c755; color: #fff; font-weight: bold; margin-top: 8px; }
   button.gray { background: #6b7280; }
@@ -118,6 +118,17 @@
       ※ ステージ同士を「かつ」にすると1人も残りません（1人1ステージのため）。その場合は「または」で。</span>
     </div>
     <button class="mini" id="btnAddCombo" onclick="addCombo()" style="margin-top:8px">＋ 条件をかけ合わせる（かつ／または）</button>
+    <div style="margin-top:10px;background:#f3f4f6;border-radius:8px;padding:8px 10px">
+      <label style="font-size:13px">🔍 施術名などのキーワードで絞り込む（任意）</label>
+      <input type="text" id="kwText" placeholder="例）ハイドロ（空欄なら絞り込みなし）">
+      <select id="kwScope">
+        <option value="any">タップ・トーク・予約フォームのどれかに含む</option>
+        <option value="talk">タップ・トークで触れた人（予約した人も含む）</option>
+        <option value="talk_nocv">タップ・トークのみ＝興味はあるがその施術は未予約</option>
+        <option value="cv">予約フォームで申し込んだ人（＝予約した人）</option>
+      </select>
+      <span class="note">過去のトーク履歴（7/2開始のログ）から、メニューのタップ（例:「ハイドロリリース」）・自由入力・予約フォームの本文を検索します。部分一致なので「ハイドロ」だけでOK。</span>
+    </div>
     <label style="font-weight:normal;font-size:13px;display:block;margin-top:8px">
       <input type="checkbox" id="exManual" style="width:18px;height:18px;vertical-align:-4px">
       1週間以内に手動送信した人を除く
@@ -464,7 +475,8 @@
             + (u.due ? '／⏰' + esc(u.due) : '')
             + (u.engage ? '／📈' + esc(u.engage) : '')
             + (u.hot ? '／🔥' + esc(u.hot) : '')
-            + (u.why ? '／🎯' + esc(u.why) : '');
+            + (u.why ? '／🎯' + esc(u.why) : '')
+            + (u.kw ? '／🔍' + esc(u.kw) : '');
           html += '<div class="member"><input type="checkbox" id="cb_' + i + '"' + defaultChecked + ' onchange="updateSendBtn()">'
             + '<div class="body"><div>' + esc(u.name)
             + ' <span class="badge st-' + esc(u.stage) + '">' + (u.stageManual ? '✋' : '') + esc(u.stage) + '</span></div>'
@@ -481,7 +493,10 @@
       })
       .lineConsoleGetList(pin(), document.getElementById('group').value,
         document.getElementById('exManual').checked ? 7 : 0,
-        comboGroups().length ? { groups: comboGroups(), mode: comboMode() } : null);
+        comboGroups().length ? { groups: comboGroups(), mode: comboMode() } : null,
+        document.getElementById('kwText').value.trim()
+          ? { text: document.getElementById('kwText').value.trim(), scope: document.getElementById('kwScope').value }
+          : null);
   }
 
   function doSend() {
