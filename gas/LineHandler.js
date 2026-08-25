@@ -422,6 +422,19 @@ const LineHandler = (() => {
 
     Logger.log('[LINE] message from ' + userId + ': ' + text);
 
+    // 配信画像タップ等のキーワード自動応答（「自動応答」シート・完全一致のみ・
+    // Reply APIで返信するため通数を消費しない）。応答したら予約検出はしない
+    try {
+      var auto = AutoReply.findMatch(text);
+      if (auto) {
+        AutoReply.sendReply(event.replyToken, auto.reply);
+        Logger.log('[LINE] auto-reply: ' + auto.keyword);
+        return;
+      }
+    } catch (autoErr) {
+      Logger.log('[LineHandler] AutoReply error (ignored): ' + autoErr.message);
+    }
+
     // 予約意図チェック
     if (!_isReservationIntent(text)) return;
 

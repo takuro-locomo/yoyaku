@@ -633,13 +633,58 @@ const FollowUp = (() => {
   /**
    * 指定したuserIdの人だけに送信（チェックを外した人には送らない）。
    * userIds はサマリーに実在しブロックでない人だけに絞ってから送る。
+   * media（任意・リッチ配信）: {imageUrl, tap:'none'|'url'|'keyword', linkUrl, keyword, replyText, aspect}
+   *   tap='url' はタップでリンクを開く。tap='keyword' はタップでキーワードがトークに送信され、
+   *   AutoReplyの自動応答（Reply API・通数消費なし）が返る。テキスト＋画像は1回の送信に
+   *   まとめるので消費は1人1通のまま。
    */
-  function send(text, pin, userIds, groupLabel) {
+  function send(text, pin, userIds, groupLabel, media) {
     _checkPin(pin);
     text = String(text || '').trim();
-    if (!text) throw new Error('メッセージが空です。');
+    var imageUrl = (media && media.imageUrl) ? String(media.imageUrl).trim() : '';
+    if (!text && !imageUrl) throw new Error('メッセージか画像URLのどちらかを入力してください。');
     if (text.length > 1000) throw new Error('メッセージが長すぎます（1000文字まで）。');
     if (!userIds || !userIds.length) throw new Error('送信先が選ばれていません。');
+
+    // メッセージ組み立て（テキスト→画像の順・最大2吹き出し）
+    var messages = [];
+    var logTag = '';
+    if (text) messages.push({ type: 'text', text: text });
+    if (imageUrl) {
+      if (imageUrl.indexOf('https://') !== 0) throw new Error('画像URLは https:// で始まる必要があります。');
+      var tap = (media.tap === 'url' || media.tap === 'keyword') ? media.tap : 'none';
+      if (tap === 'none') {
+        // タップ動作なし: 通常の画像メッセージ（元の縦横比のまま届く）
+        messages.push({ type: 'image', originalContentUrl: imageUrl, previewImageUrl: imageUrl });
+        logTag = '[🖼画像] ';
+      } else {
+        var action;
+        if (tap === 'url') {
+          var linkUrl = String(media.linkUrl || '').trim();
+          if (linkUrl.indexOf('https://') !== 0) throw new Error('タップで開くURLは https:// で始まる必要があります。');
+          action = { type: 'uri', label: '開く', uri: linkUrl };
+          logTag = '[🖼画像→リンク] ';
+        } else {
+          var kw = String(media.keyword || '').trim();
+          if (!kw) throw new Error('タップ時に送信されるキーワードを入力してください。');
+          if (kw.length > 50) throw new Error('キーワードは50文字までにしてください。');
+          // タップ→自動応答を「自動応答」シートに登録（同キーワードは上書き）。本文が空ならここで止まる
+          AutoReply.save(kw, media.replyText);
+          action = { type: 'message', label: '詳しく見る', text: kw };
+          logTag = '[🖼画像→応答:' + kw + '] ';
+        }
+        var aspect = { '1:1': '1:1', '3:2': '3:2', '16:9': '16:9', '2:3': '2:3' }[media.aspect] || '1:1';
+        messages.push({
+          type: 'flex',
+          altText: text ? text.slice(0, 100) : '画像のお知らせ',
+          contents: {
+            type: 'bubble',
+            hero: { type: 'image', url: imageUrl, size: 'full', aspectRatio: aspect, aspectMode: 'cover', action: action },
+          },
+        });
+      }
+    }
+
     var token = _props().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
     if (!token) throw new Error('LINE_CHANNEL_ACCESS_TOKEN が未設定です。');
 
@@ -665,7 +710,7 @@ const FollowUp = (() => {
         method: 'post',
         contentType: 'application/json',
         headers: { Authorization: 'Bearer ' + token },
-        payload: JSON.stringify({ to: targets.slice(i, i + 500), messages: [{ type: 'text', text: text }] }),
+        payload: JSON.stringify({ to: targets.slice(i, i + 500), messages: messages }),
         muteHttpExceptions: true,
       });
       if (res.getResponseCode() !== 200) {
@@ -678,7 +723,7 @@ const FollowUp = (() => {
     var logSheet = _sendLogSheet();
     logSheet.appendRow([
       new Date(), groupLabel || '', targets.length,
-      ok ? 'OK' : 'エラー: ' + errors.join(' / '), text, names.join('、'),
+      ok ? 'OK' : 'エラー: ' + errors.join(' / '), logTag + text, names.join('、'),
     ]);
     if (ok) {
       // 個人単位の配信履歴（ステージの「反応待ち」判定に使う）
@@ -705,7 +750,7 @@ const FollowUp = (() => {
 // --- スマホ用ページ(?page=line / ?page=report)の google.script.run から呼ばれる ---
 function lineConsoleGetList(pin, group, excludeManualDays, combo, keyword) { return FollowUp.getList(pin, group, excludeManualDays, combo, keyword); }
 function lineConsoleGetReport(pin) { return FollowUp.getReport(pin); }
-function lineConsoleSend(text, pin, userIds, groupLabel) { return FollowUp.send(text, pin, userIds, groupLabel); }
+function lineConsoleSend(text, pin, userIds, groupLabel, media) { return FollowUp.send(text, pin, userIds, groupLabel, media); }
 function lineConsoleSetStage(pin, userId, name, stage, memo) { return FollowUp.setStage(pin, userId, name, stage, memo); }
 function lineConsoleSaveTemplate(pin, stage, title, body) { return FollowUp.saveTemplate(pin, stage, title, body); }
 function lineConsoleRecordManual(pin, users, text) { return FollowUp.recordManual(pin, users, text); }

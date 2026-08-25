@@ -151,6 +151,27 @@
       <option value="">テンプレートから選ぶ…（リスト更新後に表示）</option>
     </select>
     <textarea id="msg" placeholder="例）いつもありがとうございます。ただいま◯◯キャンペーン中です。ご希望の方はこのトークにご返信ください😊"></textarea>
+    <div style="margin-top:10px;background:#f3f4f6;border-radius:8px;padding:8px 10px">
+      <label style="font-size:13px">🖼 画像をつける（リッチ配信・任意）</label>
+      <input type="text" id="imgUrl" placeholder="画像URL（https://…）※HPのメディアにアップしてURLをコピー">
+      <select id="imgTap" onchange="updateImgTap()">
+        <option value="none">タップしても何もしない（画像を見せるだけ）</option>
+        <option value="url">タップでリンクを開く（LP・予約ページなど）</option>
+        <option value="keyword">タップで自動応答メッセージが届く</option>
+      </select>
+      <input type="text" id="imgLink" placeholder="タップで開くURL（https://…）" style="display:none">
+      <div id="imgKwBox" style="display:none">
+        <input type="text" id="imgKw" placeholder="キーワード（例: ハイドロ詳細）※タップするとこの文字が相手のトークに送信されます">
+        <textarea id="imgReply" style="min-height:80px" placeholder="自動応答の本文（キーワードを受信したら自動で返信・通数消費なし・料金や詳細案内など）"></textarea>
+      </div>
+      <select id="imgAspect" style="display:none">
+        <option value="1:1">画像の形: 正方形 1:1（推奨・1040×1040など）</option>
+        <option value="3:2">画像の形: 横長 3:2</option>
+        <option value="16:9">画像の形: 横長ワイド 16:9</option>
+        <option value="2:3">画像の形: 縦長 2:3</option>
+      </select>
+      <span class="note">JPEG/PNG・https必須。テキストと画像を一緒に送っても<b>消費は1人1通のまま</b>。タップ動作つきの画像は選んだ形に切り抜かれるので、画像の縦横比と合わせてください（「何もしない」は元の縦横比のまま届きます）。</span>
+    </div>
     <button class="mini" onclick="saveTmpl()">💾 テンプレート保存</button>
     <button class="mini" onclick="copyMsg()">📋 本文コピー</button>
     <button class="mini" onclick="recordManual()">✅ 手動送信を記録</button>
@@ -177,6 +198,7 @@
   var lastGroupLabel = ''; // 直近リストの条件ラベル（かけ合わせ時は「AかつB」形式・配信ログ用）
   var stages = ['新規', '反応待ち', '反応あり', '予約済み', '休眠', '対象外'];
   renderBoard(null);  // 初期表示（人数は「-」、リスト更新で埋まる）
+  updateImgTap();     // 画像タップ動作の入力欄の初期表示
 
   function pin() { return ''; }  // PIN廃止（サーバー側引数の互換用）
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -250,6 +272,26 @@
   }
   function updateComboMode() {
     document.getElementById('comboMode').style.display = comboGroups().length ? 'block' : 'none';
+  }
+
+  // ---- 画像つき配信（リッチ配信） ----
+  function updateImgTap() {
+    var tap = document.getElementById('imgTap').value;
+    document.getElementById('imgLink').style.display = (tap === 'url') ? '' : 'none';
+    document.getElementById('imgKwBox').style.display = (tap === 'keyword') ? '' : 'none';
+    document.getElementById('imgAspect').style.display = (tap === 'none') ? 'none' : '';
+  }
+  function buildMedia() {
+    var url = document.getElementById('imgUrl').value.trim();
+    if (!url) return null;
+    return {
+      imageUrl: url,
+      tap: document.getElementById('imgTap').value,
+      linkUrl: document.getElementById('imgLink').value.trim(),
+      keyword: document.getElementById('imgKw').value.trim(),
+      replyText: document.getElementById('imgReply').value.trim(),
+      aspect: document.getElementById('imgAspect').value,
+    };
   }
 
   function renderSendHist(items) {
@@ -503,7 +545,11 @@
     var msg = document.getElementById('msg').value.trim();
     var res = document.getElementById('result');
     var sel = checked();
-    if (!msg) { res.innerHTML = '<p class="err">メッセージを入力してください。</p>'; return; }
+    var media = buildMedia();
+    if (!msg && !media) { res.innerHTML = '<p class="err">メッセージか画像URLを入力してください。</p>'; return; }
+    if (media && media.imageUrl.indexOf('https://') !== 0) { res.innerHTML = '<p class="err">画像URLは https:// で始まる必要があります。</p>'; return; }
+    if (media && media.tap === 'url' && media.linkUrl.indexOf('https://') !== 0) { res.innerHTML = '<p class="err">タップで開くURLを入力してください（https://…）。</p>'; return; }
+    if (media && media.tap === 'keyword' && (!media.keyword || !media.replyText)) { res.innerHTML = '<p class="err">タップ応答のキーワードと自動応答の本文を両方入力してください。</p>'; return; }
     if (!sel.length) { res.innerHTML = '<p class="err">送信先にチェックを入れてください。</p>'; return; }
     if (quota && quota.remaining != null && sel.length > quota.remaining) {
       res.innerHTML = '<p class="err">今月の残り通数（' + quota.remaining + '通）を超えています。送信先を' + quota.remaining + '人以下に減らしてください。</p>';
@@ -512,7 +558,13 @@
     var quotaMsg = (quota && quota.remaining != null)
       ? '\n（今月の残り ' + quota.remaining + '通 → 送信後 ' + (quota.remaining - sel.length) + '通）'
       : '\n（月200通の枠を' + sel.length + '通消費します）';
-    if (!confirm(sel.length + '人に送信します。よろしいですか？' + quotaMsg)) return;
+    var mediaMsg = '';
+    if (media) {
+      mediaMsg = '\n🖼 画像つき'
+        + (media.tap === 'url' ? '（タップでリンクを開く）'
+          : media.tap === 'keyword' ? '（タップで自動応答「' + media.keyword + '」が届く設定を登録）' : '');
+    }
+    if (!confirm(sel.length + '人に送信します。よろしいですか？' + mediaMsg + quotaMsg)) return;
     document.getElementById('btnSend').disabled = true;
     res.innerHTML = '<p class="note">送信中…</p>';
     // かけ合わせ時は「【A】かつ【B】」形式のラベルで配信ログに残す
@@ -530,7 +582,7 @@
         updateSendBtn();
         res.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
       })
-      .lineConsoleSend(msg, pin(), sel.map(function (u) { return u.userId; }), groupLabel);
+      .lineConsoleSend(msg, pin(), sel.map(function (u) { return u.userId; }), groupLabel, media);
   }
 </script>
 </body>
