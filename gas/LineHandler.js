@@ -422,6 +422,18 @@ const LineHandler = (() => {
 
     Logger.log('[LINE] message from ' + userId + ': ' + text);
 
+    // 「テスト登録」: 送ってきた本人をテスト配信先として登録（スタッフ用・Reply APIなので無料）
+    if (text.trim() === 'テスト登録') {
+      try {
+        PropertiesService.getScriptProperties().setProperty('LINE_TEST_USER_ID', userId);
+        AutoReply.sendReply(event.replyToken,
+          'このLINEをテスト配信先として登録しました✅\n配信ページの「🧪 テスト配信」を押すと、このトークにお試し配信が届きます。');
+      } catch (regErr) {
+        Logger.log('[LineHandler] test register error: ' + regErr.message);
+      }
+      return;
+    }
+
     // 配信画像タップ等のキーワード自動応答（「自動応答」シート・完全一致のみ・
     // Reply APIで返信するため通数を消費しない）。応答したら予約検出はしない
     try {

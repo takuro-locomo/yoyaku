@@ -631,20 +631,18 @@ const FollowUp = (() => {
   }
 
   /**
-   * 指定したuserIdの人だけに送信（チェックを外した人には送らない）。
-   * userIds はサマリーに実在しブロックでない人だけに絞ってから送る。
-   * media（任意・リッチ配信）: {imageUrl, tap:'none'|'url'|'keyword', linkUrl, keyword, replyText, aspect}
+   * テキスト＋media（画像・タップ動作）から送信メッセージ配列を組み立てる（本配信・テスト配信共通）。
+   * media: {imageUrl, tap:'none'|'url'|'keyword', linkUrl, keyword, replyText, aspect}
    *   tap='url' はタップでリンクを開く。tap='keyword' はタップでキーワードがトークに送信され、
-   *   AutoReplyの自動応答（Reply API・通数消費なし）が返る。テキスト＋画像は1回の送信に
-   *   まとめるので消費は1人1通のまま。
+   *   AutoReplyの自動応答（Reply API・通数消費なし）が返る。この登録もここで行う。
+   *   テキスト＋画像は1回の送信にまとめるので消費は1人1通のまま。
+   * 戻り値: {messages, logTag}
    */
-  function send(text, pin, userIds, groupLabel, media) {
-    _checkPin(pin);
+  function _buildMessages(text, media) {
     text = String(text || '').trim();
     var imageUrl = (media && media.imageUrl) ? String(media.imageUrl).trim() : '';
     if (!text && !imageUrl) throw new Error('メッセージか画像URLのどちらかを入力してください。');
     if (text.length > 1000) throw new Error('メッセージが長すぎます（1000文字まで）。');
-    if (!userIds || !userIds.length) throw new Error('送信先が選ばれていません。');
 
     // メッセージ組み立て（テキスト→画像の順・最大2吹き出し）
     var messages = [];
@@ -685,6 +683,20 @@ const FollowUp = (() => {
       }
     }
 
+    return { messages: messages, logTag: logTag };
+  }
+
+  /**
+   * 指定したuserIdの人だけに送信（チェックを外した人には送らない）。
+   * userIds はサマリーに実在しブロックでない人だけに絞ってから送る。
+   */
+  function send(text, pin, userIds, groupLabel, media) {
+    _checkPin(pin);
+    text = String(text || '').trim();
+    if (!userIds || !userIds.length) throw new Error('送信先が選ばれていません。');
+    var built = _buildMessages(text, media);
+    var messages = built.messages;
+    var logTag = built.logTag;
     var token = _props().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
     if (!token) throw new Error('LINE_CHANNEL_ACCESS_TOKEN が未設定です。');
 
@@ -735,6 +747,41 @@ const FollowUp = (() => {
     return { sent: targets.length, names: names };
   }
 
+  /**
+   * テスト配信: 「テスト登録」で登録した自分のLINEに1通だけ送る（Push API・1通消費）。
+   * タップ→自動応答の登録も本番同様に行うので、実機でそのままの流れを確認できる。
+   * ステージ・配信先履歴には記録しない（テストなので反応待ち判定等に影響させない）。
+   */
+  function sendTest(pin, text, media) {
+    _checkPin(pin);
+    var testId = _props().getProperty('LINE_TEST_USER_ID');
+    if (!testId) {
+      throw new Error('テスト配信先が未登録です。\nご自分のスマホから公式LINEに「テスト登録」とトークを送ってください（自動で登録完了の返信が届きます）。そのあと、もう一度このボタンを押してください。');
+    }
+    var built = _buildMessages(text, media);
+    var quota = _quota();
+    if (quota && quota.remaining != null && quota.remaining < 1) {
+      throw new Error('今月の残り通数がないためテスト配信できません。');
+    }
+    var token = _props().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
+    if (!token) throw new Error('LINE_CHANNEL_ACCESS_TOKEN が未設定です。');
+    var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + token },
+      payload: JSON.stringify({ to: testId, messages: built.messages }),
+      muteHttpExceptions: true,
+    });
+    if (res.getResponseCode() !== 200) {
+      throw new Error('テスト配信でエラー: ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200));
+    }
+    _sendLogSheet().appendRow([
+      new Date(), '🧪テスト配信', 1, 'OK(テスト)',
+      built.logTag + String(text || '').trim(), '(テスト用LINE)',
+    ]);
+    return { sent: 1 };
+  }
+
   /** 初回セットアップ: 毎朝6時台の自動集計トリガー作成（何度呼んでも安全。PINは廃止） */
   function setup(pin) {
     ScriptApp.getProjectTriggers().forEach(function (t) {
@@ -744,13 +791,14 @@ const FollowUp = (() => {
     return { trigger: '毎日6〜7時に updateLineUserSummary を実行' };
   }
 
-  return { getList: getList, send: send, setup: setup, setStage: setStage, saveTemplate: saveTemplate, getReport: getReport, recordManual: recordManual };
+  return { getList: getList, send: send, sendTest: sendTest, setup: setup, setStage: setStage, saveTemplate: saveTemplate, getReport: getReport, recordManual: recordManual };
 })();
 
 // --- スマホ用ページ(?page=line / ?page=report)の google.script.run から呼ばれる ---
 function lineConsoleGetList(pin, group, excludeManualDays, combo, keyword) { return FollowUp.getList(pin, group, excludeManualDays, combo, keyword); }
 function lineConsoleGetReport(pin) { return FollowUp.getReport(pin); }
 function lineConsoleSend(text, pin, userIds, groupLabel, media) { return FollowUp.send(text, pin, userIds, groupLabel, media); }
+function lineConsoleSendTest(pin, text, media) { return FollowUp.sendTest(pin, text, media); }
 function lineConsoleSetStage(pin, userId, name, stage, memo) { return FollowUp.setStage(pin, userId, name, stage, memo); }
 function lineConsoleSaveTemplate(pin, stage, title, body) { return FollowUp.saveTemplate(pin, stage, title, body); }
 function lineConsoleRecordManual(pin, users, text) { return FollowUp.recordManual(pin, users, text); }

@@ -163,6 +163,7 @@
       <div id="imgKwBox" style="display:none">
         <input type="text" id="imgKw" placeholder="キーワード（例: ハイドロ詳細）※タップするとこの文字が相手のトークに送信されます">
         <textarea id="imgReply" style="min-height:80px" placeholder="自動応答の本文（キーワードを受信したら自動で返信・通数消費なし・料金や詳細案内など）"></textarea>
+        <span class="note">流れ: ①「送るメッセージ」と画像が届く → ②相手が画像をタップするとキーワードが相手のトークに送信される → ③それに反応して自動応答の本文が届く（無料）。下の「👀 プレビュー」で見え方を確認できます。</span>
       </div>
       <select id="imgAspect" style="display:none">
         <option value="1:1">画像の形: 正方形 1:1（推奨・1040×1040など）</option>
@@ -172,9 +173,12 @@
       </select>
       <span class="note">JPEG/PNG・https必須。テキストと画像を一緒に送っても<b>消費は1人1通のまま</b>。タップ動作つきの画像は選んだ形に切り抜かれるので、画像の縦横比と合わせてください（「何もしない」は元の縦横比のまま届きます）。</span>
     </div>
+    <button class="mini" onclick="showPreview()">👀 プレビュー</button>
+    <button class="mini" onclick="sendTestToMe()">🧪 テスト配信（自分に1通）</button>
     <button class="mini" onclick="saveTmpl()">💾 テンプレート保存</button>
     <button class="mini" onclick="copyMsg()">📋 本文コピー</button>
     <button class="mini" onclick="recordManual()">✅ 手動送信を記録</button>
+    <div id="preview"></div>
     <button id="btnSend" onclick="doSend()" disabled>② チェックした人に送信</button>
     <p class="note">※ ここからの送信は<b>1人でも月200通の枠を消費</b>します。1〜数人への個別フォローは「📋 本文コピー」→公式LINEアプリのチャットに貼り付けて送ると<b>無料</b>です（相手から一度でもトークがあった人のみ）。<br>
     ※ 公式LINEアプリで手動送信したら、送った人にチェックを入れて「<b>✅ 手動送信を記録</b>」を押してください。記録しないとステージ（反応待ち）や「◯◯以上 未送信」グループに反映されません。<br>
@@ -292,6 +296,56 @@
       replyText: document.getElementById('imgReply').value.trim(),
       aspect: document.getElementById('imgAspect').value,
     };
+  }
+
+  // ---- プレビュー（届き方と、タップ→自動応答の流れをLINE風に表示） ----
+  function showPreview() {
+    var el = document.getElementById('preview');
+    var msg = document.getElementById('msg').value.trim();
+    var media = buildMedia();
+    if (!msg && !media) { el.innerHTML = '<p class="err">メッセージか画像URLを入力してください。</p>'; return; }
+    function bubbleL(inner) { return '<div style="display:flex"><div style="max-width:82%;background:#fff;border-radius:16px;padding:8px 12px;margin:5px 0;font-size:13px;white-space:pre-wrap;word-break:break-word;color:#111">' + inner + '</div></div>'; }
+    function bubbleR(inner) { return '<div style="display:flex;justify-content:flex-end"><div style="max-width:82%;background:#8de055;border-radius:16px;padding:8px 12px;margin:5px 0;font-size:13px;white-space:pre-wrap;word-break:break-word;color:#111">' + inner + '</div></div>'; }
+    function step(t) { return '<div style="color:#fff;font-size:12px;font-weight:bold;margin:10px 0 2px">' + t + '</div>'; }
+    var html = '<div style="background:#7494c0;border-radius:12px;padding:4px 12px 12px;margin-top:10px">';
+    html += step('① 配信で届くメッセージ（上野医院 → 相手）');
+    if (msg) html += bubbleL(esc(msg));
+    if (media) {
+      var tapNote = media.tap === 'url' ? '👆 タップするとリンクが開きます'
+        : media.tap === 'keyword' ? '👆 タップすると②へ進みます' : 'タップ動作なし（見るだけ）';
+      html += '<div style="margin:5px 0"><img src="' + esc(media.imageUrl) + '" style="max-width:72%;border-radius:14px;display:block">'
+        + '<div style="color:#e5edf7;font-size:11px;margin-top:2px">' + tapNote + '（画像が出ない場合はURLを確認）</div></div>';
+    }
+    if (media && media.tap === 'keyword') {
+      html += step('② 相手が画像をタップ → このキーワードが相手のトークから自動送信される');
+      html += bubbleR(esc(media.keyword || '（キーワード未入力）'));
+      html += step('③ すぐに自動応答が届く（通数消費なし・無料）');
+      html += bubbleL(esc(media.replyText || '（自動応答の本文が未入力）'));
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  // ---- テスト配信（「テスト登録」済みの自分のLINEに1通だけ） ----
+  function sendTestToMe() {
+    var msg = document.getElementById('msg').value.trim();
+    var res = document.getElementById('result');
+    var media = buildMedia();
+    if (!msg && !media) { res.innerHTML = '<p class="err">メッセージか画像URLを入力してください。</p>'; return; }
+    if (media && media.imageUrl.indexOf('https://') !== 0) { res.innerHTML = '<p class="err">画像URLは https:// で始まる必要があります。</p>'; return; }
+    if (media && media.tap === 'url' && media.linkUrl.indexOf('https://') !== 0) { res.innerHTML = '<p class="err">タップで開くURLを入力してください（https://…）。</p>'; return; }
+    if (media && media.tap === 'keyword' && (!media.keyword || !media.replyText)) { res.innerHTML = '<p class="err">タップ応答のキーワードと自動応答の本文を両方入力してください。</p>'; return; }
+    if (!confirm('ご自分のLINEに1通だけテスト配信します（月200通の枠を1通消費）。\n初めての場合は、先にご自分のスマホから公式LINEに「テスト登録」と送っておいてください。')) return;
+    res.innerHTML = '<p class="note">テスト配信中…</p>';
+    google.script.run
+      .withSuccessHandler(function () {
+        if (quota && quota.remaining != null) { quota.remaining = Math.max(0, quota.remaining - 1); quota.used += 1; }
+        res.innerHTML = '<p class="ok">テスト配信しました🧪 ご自分のLINEを確認してください。\n画像タップ→自動応答の流れも本番と同じように動きます。</p>';
+      })
+      .withFailureHandler(function (e) {
+        res.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
+      })
+      .lineConsoleSendTest(pin(), msg, media);
   }
 
   function renderSendHist(items) {
