@@ -169,7 +169,9 @@ THE MODELのリードステージ管理をクリニック向けに翻案した�
 
 1. `clasp push` でコードを反映し、**Webアプリを新バージョンで再デプロイ**する
    (Drive/Gmail/トリガーのスコープが増えるため再承認が必要)
-2. `setBackupAdminToken('任意の合言葉')` を実行 — **未設定の間は復元APIが常に拒否される**
+2. 「プロジェクトの設定 → スクリプト プロパティ」で `BACKUP_ADMIN_TOKEN` に任意の合言葉を設定
+   — **未設定の間は復元APIが常に拒否される** (エディタの実行ボタンでは引数を渡せないため、
+   `setBackupAdminToken()` はコードから呼ぶ場合のみ使う)
 3. `installBackupTriggers()` を実行 — 週次・日次トリガーを設置
 4. `backupNow()` を実行して1件目のバックアップと保管フォルダを作成
 5. 必要なら Script Properties に `BACKUP_ALERT_EMAIL` / `ANOMALY_THRESHOLD` を設定

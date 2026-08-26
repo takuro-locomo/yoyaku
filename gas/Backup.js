@@ -513,7 +513,11 @@ function installBackupTriggers() {
   Logger.log('自動バックアップを設定しました: ' + JSON.stringify(s));
 }
 
-/** 復元APIの合言葉を設定する (GASエディタから引数付きで実行) */
+/**
+ * 復元APIの合言葉を設定する。
+ * GASエディタの実行ボタンでは引数を渡せないため、通常は
+ * 「プロジェクトの設定 → スクリプト プロパティ」で BACKUP_ADMIN_TOKEN を直接追加する。
+ */
 function setBackupAdminToken(token) {
   if (!token) throw new Error('引数 token が未指定です');
   PropertiesService.getScriptProperties().setProperty('BACKUP_ADMIN_TOKEN', token);
