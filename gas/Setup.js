@@ -27,6 +27,11 @@ function setup() {
  */
 function resetAndSetup() {
   setSpreadsheetId('1VjY6iweo0BD_kgOTUw4gsS7IyL9MuvArSF09fp-NQG0');
+
+  // 全データが消えるので、必ずバックアップを取ってから進める
+  const backup = Backup.create('manual', 'resetAndSetup 実行前の自動バックアップ');
+  Logger.log('復元用バックアップを取得しました: ' + backup.fileUrl);
+
   const ss = SpreadsheetApp.openById(
     PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID')
   );

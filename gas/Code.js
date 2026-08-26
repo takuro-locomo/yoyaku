@@ -121,6 +121,22 @@ function _route(action, params) {
     case 'setupLineDaily':
       return _buildResponse({ success: true, data: FollowUp.setup(params.pin) });
 
+    // --- バックアップ / 復元 ---
+    case 'getBackups':
+      return _buildResponse({ success: true, data: Backup.list(params.limit) });
+
+    case 'getBackupStatus':
+      return _buildResponse({ success: true, data: Backup.status() });
+
+    case 'getBackupDiff':
+      return _buildResponse({ success: true, data: Backup.diff(params.backupId) });
+
+    case 'createBackup':
+      return _buildResponse({ success: true, data: Backup.create('manual', params.note || '管理画面からの手動バックアップ') });
+
+    case 'restoreBackup':
+      return _buildResponse({ success: true, data: Backup.restore(params) });
+
     // --- マスタ一括取得 (管理画面用) ---
     case 'getMasters':
       return _buildResponse({ success: true, data: _getMasters() });

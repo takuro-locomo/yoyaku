@@ -53,6 +53,7 @@ clinic-system/
 │   ├── Resource.gs         # リソース管理 (部屋/機械/スタッフ)
 │   ├── LineHandler.gs      # LINE Webhook処理
 │   ├── SheetService.gs     # Sheets CRUD操作
+│   ├── Backup.js           # 週次/日次バックアップ・復元・大量登録の検知
 │   └── appsscript.json     # GASマニフェスト
 └── admin/                  # React管理画面
     ├── src/
@@ -74,6 +75,7 @@ clinic-system/
 | `staff` | スタッフマスタ |
 | `services` | メニュー/施術マスタ |
 | `patients` | 患者マスタ (LINE userId紐付け) |
+| `_backups` | バックアップ台帳 (非表示シート・復元対象外) |
 
 ### reservations シートのカラム
 
@@ -143,6 +145,51 @@ THE MODELのリードステージ管理をクリニック向けに翻案した�
 
 **6ステージ**: 新規（反応なし）／反応待ち（配信後反応なし）／反応あり（ボタン等の反応・未予約）／予約済み（フォームCV）／休眠（90日反応なし・予約済みでも落ちてリピート再アプローチ対象）／対象外（ブロック・手動除外＝送信ブロック）。手動上書きは自動判定より優先され、（自動）に戻すまで固定。
 
+## バックアップと復元
+
+データはGoogle Sheets1枚に集約されているため、スプレッドシートの消失や
+大量の不正データ投入に備えて `gas/Backup.js` でスナップショットを保管する。
+
+### 仕組み
+
+- 毎週月曜3時台に**週次**、毎日4時台に**日次**でスプレッドシートを丸ごと複製し、
+  Drive上の「clinic-system バックアップ」フォルダに保管する
+- 保管本数は 週次12 / 日次14 / 手動20 / 復元直前10。超えた分はゴミ箱へ移動 (30日間は復旧可能)
+- 日次ジョブは直近24時間の新規予約が閾値 (`ANOMALY_THRESHOLD`、既定60件) を超えたら管理者にメール通知する
+- 復元は実行直前に `pre-restore` バックアップを自動取得してから上書きするため、戻しすぎても復旧できる
+- 台帳シート `_backups` は復元対象から除外している (復元でバックアップ履歴を失わないため)
+- `history` (操作履歴) も既定では巻き戻さない。誰がいつ何を入れたかの記録を
+  残すため (`sheets` パラメータで明示指定すれば復元できる)
+- LINE行動ログ・ステージ管理・テンプレートは別スプレッドシート
+  (`LINE_ACTIVITY_LOG_SSID`) にあるため、`_line` 付きの別ファイルとして同時に複製する。
+  こちらの復元は自動化していない — 複製をコピーして
+  `LINE_ACTIVITY_LOG_SSID` を差し替える (管理画面の「LINE分」リンクから辿れる)
+
+### 初回セットアップ (GASエディタで1度だけ)
+
+1. `clasp push` でコードを反映し、**Webアプリを新バージョンで再デプロイ**する
+   (Drive/Gmail/トリガーのスコープが増えるため再承認が必要)
+2. `setBackupAdminToken('任意の合言葉')` を実行 — **未設定の間は復元APIが常に拒否される**
+3. `installBackupTriggers()` を実行 — 週次・日次トリガーを設置
+4. `backupNow()` を実行して1件目のバックアップと保管フォルダを作成
+5. 必要なら Script Properties に `BACKUP_ALERT_EMAIL` / `ANOMALY_THRESHOLD` を設定
+
+### 管理画面
+
+`/backup` ページで一覧・手動バックアップ・復元ができる。
+復元は「管理トークン」+「RESTORE と入力」の二重確認を要求し、実行前に
+現在の件数とバックアップ時点の件数の差分を表示する。
+
+### API
+
+| action | メソッド | 用途 |
+|---|---|---|
+| `getBackups` | GET | バックアップ一覧 |
+| `getBackupStatus` | GET | 最終バックアップ・トリガー稼働状況 |
+| `getBackupDiff` | GET | 現在とバックアップの件数差分 |
+| `createBackup` | POST | 手動バックアップ |
+| `restoreBackup` | POST | 復元 (`token` + `confirm='RESTORE'` 必須) |
+
 ## 開発上の注意事項
 
 - GASのコードは `clasp` でローカル開発・デプロイする
@@ -150,3 +197,5 @@ THE MODELのリードステージ管理をクリニック向けに翻案した�
 - LINE Webhookの署名検証 (`X-Line-Signature`) を必ず実装する
 - 患者の個人情報はSpreadsheetsのアクセス権限で保護する
 - GASのWebアプリURLは環境変数ではなく `PropertiesService` で管理する
+- WebアプリはANYONE_ANONYMOUS公開のため、破壊的な操作 (復元など) は必ず
+  `BACKUP_ADMIN_TOKEN` の照合を通す

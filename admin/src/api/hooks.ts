@@ -226,3 +226,103 @@ export function useUpsertPatient() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['patients'] }); },
   });
 }
+
+// ---------------------------------------------------------------------------
+// バックアップ / 復元
+// ---------------------------------------------------------------------------
+
+export interface BackupRecord {
+  id:        string;
+  fileId:    string;
+  fileName:  string;
+  fileUrl:   string;
+  /** LINE行動ログ側スプレッドシートの複製 (未作成なら空) */
+  lineFileUrl: string;
+  type:      'weekly' | 'daily' | 'manual' | 'pre-restore';
+  createdAt: string;
+  rowCounts: Record<string, number>;
+  note:      string;
+  available: boolean;
+}
+
+export interface BackupStatus {
+  latestBackupAt:   string | null;
+  latestWeeklyAt:   string | null;
+  latestDailyAt:    string | null;
+  backupCount:      number;
+  autoBackupOn:     boolean;
+  dailyBackupOn:    boolean;
+  restoreEnabled:   boolean;
+  lineBackupOn:     boolean;
+  folderUrl:        string;
+  currentRowCounts: Record<string, number>;
+}
+
+export interface BackupDiff {
+  backupId:  string;
+  createdAt: string;
+  fileName:  string;
+  sheets:    { sheet: string; current: number; backup: number; delta: number }[];
+}
+
+export interface RestoreResult {
+  restoredFrom:   { id: string; fileName: string; createdAt: string };
+  safetyBackupId: string;
+  safetyBackupAt: string;
+  sheets:         { sheet: string; rows: number }[];
+}
+
+export function useBackups() {
+  return useQuery<BackupRecord[]>({
+    queryKey: ['backups'],
+    queryFn:  () => gasGet<BackupRecord[]>('getBackups'),
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+}
+
+export function useBackupStatus() {
+  return useQuery<BackupStatus>({
+    queryKey: ['backupStatus'],
+    queryFn:  () => gasGet<BackupStatus>('getBackupStatus'),
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+}
+
+/** 復元前の差分プレビュー。backupId が null の間は実行しない */
+export function useBackupDiff(backupId: string | null) {
+  return useQuery<BackupDiff>({
+    queryKey: ['backupDiff', backupId],
+    queryFn:  () => gasGet<BackupDiff>('getBackupDiff', { backupId: backupId! }),
+    enabled:  !!backupId,
+    retry: 1,
+  });
+}
+
+export function useCreateBackup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (note?: string) => gasPost<BackupRecord>('createBackup', { note: note ?? '' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['backups'] });
+      qc.invalidateQueries({ queryKey: ['backupStatus'] });
+    },
+  });
+}
+
+export function useRestoreBackup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { backupId: string; token: string }) =>
+      gasPost<RestoreResult>('restoreBackup', {
+        backupId: vars.backupId,
+        token:    vars.token,
+        confirm:  'RESTORE',
+      }),
+    onSuccess: () => {
+      // 復元でデータが総入れ替えになるため、全キャッシュを捨てる
+      qc.invalidateQueries();
+    },
+  });
+}

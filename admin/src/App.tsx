@@ -5,6 +5,7 @@ import Reservations from './pages/Reservations';
 import Resources from './pages/Resources';
 import Schedule from './pages/Schedule';
 import Patients from './pages/Patients';
+import Backup from './pages/Backup';
 import { useScheduleReservations } from './api/hooks';
 
 const NAV = [
@@ -13,6 +14,7 @@ const NAV = [
   { to: '/reservations', label: '予約一覧',     icon: '🗒️', showPendingBadge: false },
   { to: '/patients',     label: '患者管理',     icon: '👤', showPendingBadge: false },
   { to: '/resources',    label: 'マスタ管理',   icon: '⚙️', showPendingBadge: false },
+  { to: '/backup',       label: 'バックアップ', icon: '💾', showPendingBadge: false },
 ];
 
 function PendingBadge() {
@@ -109,6 +111,7 @@ export default function App() {
               <Route path="/reservations" element={<Reservations />} />
               <Route path="/resources"    element={<Resources />} />
               <Route path="/patients"     element={<Patients />} />
+              <Route path="/backup"       element={<Backup />} />
               <Route path="*"             element={<Navigate to="/schedule" replace />} />
             </Routes>
           </div>
