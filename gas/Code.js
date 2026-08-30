@@ -253,7 +253,7 @@ function _buildResponse(data) {
  */
 function setStaffEmail() {
   var props = PropertiesService.getScriptProperties();
-  props.setProperty('STAFF_EMAIL', 'takuro1006@gmail.com');
+  props.setProperty('STAFF_EMAIL', 'takuro1006@gmail.com,uenoiinkarute@gmail.com,uenoiin2016@gmail.com');
   Logger.log('STAFF_EMAIL 設定完了');
 }
 

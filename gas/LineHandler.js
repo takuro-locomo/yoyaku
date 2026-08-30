@@ -297,13 +297,26 @@ const LineHandler = (() => {
 
   /**
    * 予約検出時にスタッフにメール通知を送る。
-   * 送信先は PropertiesService の STAFF_EMAIL から取得。
+   * 送信先は PropertiesService の STAFF_EMAIL（カンマ区切り可）と
+   * 下の EXTRA_NOTIFY_EMAILS を合わせたもの（重複は除外）。
    * GAS の MailApp は無料で1日100通まで送信可能。
    */
+  var EXTRA_NOTIFY_EMAILS = 'uenoiinkarute@gmail.com,uenoiin2016@gmail.com';
+
   function _sendEmailNotify(patientName, messageText, detectedDate, detectedTime) {
-    var email = PropertiesService.getScriptProperties().getProperty('STAFF_EMAIL');
+    var staffEmail = PropertiesService.getScriptProperties().getProperty('STAFF_EMAIL') || '';
+    var seen = {};
+    var email = (staffEmail + ',' + EXTRA_NOTIFY_EMAILS)
+      .split(',')
+      .map(function (s) { return s.trim(); })
+      .filter(function (s) {
+        if (!s || seen[s]) return false;
+        seen[s] = true;
+        return true;
+      })
+      .join(',');
     if (!email) {
-      Logger.log('[LineHandler] STAFF_EMAIL 未設定のためメール通知スキップ');
+      Logger.log('[LineHandler] 送信先が空のためメール通知スキップ');
       return;
     }
 
