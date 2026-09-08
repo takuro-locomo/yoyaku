@@ -103,8 +103,13 @@ export default function Schedule() {
   const [absenceOpen, setAbsenceOpen] = useState(false);
   const [pickerOpen,  setPickerOpen]  = useState(false);
 
-  // 日付タブ(週の並び)の折りたたみ。設定はブラウザに記憶する
-  const [tabsHidden, setTabsHidden] = useState(() => localStorage.getItem('scheduleTabsHidden') === '1');
+  // 日付タブ(週の並び)の折りたたみ。設定はブラウザに記憶する。
+  // 未設定時の初期値: 携帯はたたむ (画面を広く)、PCは表示
+  const [tabsHidden, setTabsHidden] = useState(() => {
+    const stored = localStorage.getItem('scheduleTabsHidden');
+    if (stored !== null) return stored === '1';
+    return window.innerWidth < 768;
+  });
   const toggleTabs = () => setTabsHidden(v => {
     localStorage.setItem('scheduleTabsHidden', v ? '' : '1');
     return !v;

@@ -9,7 +9,9 @@ const ZOOM_STEP = 0.1;
 
 function loadZoom(): number {
   const v = Number(localStorage.getItem(ZOOM_KEY));
-  return v >= ZOOM_MIN && v <= ZOOM_MAX ? v : 1;
+  if (v >= ZOOM_MIN && v <= ZOOM_MAX) return v;
+  // 未設定時の初期値: 携帯は40% (1画面で見渡せるように)、PCは等倍
+  return window.innerWidth < 768 ? 0.4 : 1;
 }
 
 interface Props {

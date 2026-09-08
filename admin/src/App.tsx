@@ -17,6 +17,15 @@ const NAV = [
   { to: '/backup',       label: 'バックアップ', icon: '💾', showPendingBadge: false },
 ];
 
+/**
+ * トップ(/)の振り分け: 携帯はいちばん使う「予約入力」を初期ページにする。
+ * PCは従来どおりダッシュボード(今日の予約の確認)。
+ */
+function HomeRoute() {
+  const isMobile = window.innerWidth < 768;
+  return isMobile ? <Navigate to="/schedule" replace /> : <Dashboard />;
+}
+
 function PendingBadge() {
   const today = new Date().toLocaleDateString('sv');
   const { data: reservations = [] } = useScheduleReservations(today);
@@ -107,7 +116,7 @@ export default function App() {
           <div className="flex-1 overflow-auto">
             <Routes>
               <Route path="/schedule"     element={<Schedule />} />
-              <Route path="/"             element={<Dashboard />} />
+              <Route path="/"             element={<HomeRoute />} />
               <Route path="/reservations" element={<Reservations />} />
               <Route path="/resources"    element={<Resources />} />
               <Route path="/patients"     element={<Patients />} />
