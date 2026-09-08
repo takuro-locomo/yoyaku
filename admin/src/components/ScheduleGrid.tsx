@@ -6,12 +6,15 @@ interface Props {
   staff:        ScheduleStaff[];
   timeSlots: string[];
   reservations: ScheduleReservation[];
+  /** この日に終日不在の列 (machineId → ラベル)。該当列は1マスに結合して塗りつぶす */
+  closures?: { machineId: string; label: string }[];
   onCellClick: (machineId: string, timeSlot: string) => void;
   onReservationClick: (reservation: ScheduleReservation) => void;
 }
 
-export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservations, onCellClick, onReservationClick }: Props) {
+export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservations, closures = [], onCellClick, onReservationClick }: Props) {
   const ALL_MACHINES = machineAreas.flatMap(a => a.machines);
+  const closureMap = new Map(closures.map(c => [c.machineId, c.label]));
   // --- Build lookup maps ---
   const reservationMap = new Map<string, ScheduleReservation>();
   reservations.forEach(r => reservationMap.set(`${r.machineId}-${r.timeSlot}`, r));
@@ -134,6 +137,31 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
                 {/* Machine cells */}
                 {ALL_MACHINES.map(machine => {
                   const key = `${machine.id}-${slot}`;
+
+                  // 終日不在の列: 先頭行で全行結合の1マスを描き、以降の行はスキップ
+                  const closureLabel = closureMap.get(machine.id);
+                  if (closureLabel !== undefined) {
+                    if (slotIdx !== 0) return null;
+                    return (
+                      <td
+                        key={machine.id}
+                        rowSpan={timeSlots.length}
+                        className="border border-slate-300 text-center align-middle select-none"
+                        style={{
+                          backgroundImage:
+                            'repeating-linear-gradient(-45deg, #f1f5f9 0px, #f1f5f9 10px, #e2e8f0 10px, #e2e8f0 20px)',
+                        }}
+                        title={`${closureLabel}（終日）`}
+                      >
+                        <div
+                          className="mx-auto font-bold text-slate-500 tracking-[0.3em]"
+                          style={{ writingMode: 'vertical-rl', fontSize: '15px' }}
+                        >
+                          {closureLabel}
+                        </div>
+                      </td>
+                    );
+                  }
 
                   // Skip: covered by rowspan
                   if (occupiedSet.has(key)) return null;

@@ -348,6 +348,74 @@ const Reservation = (() => {
   const SCHEDULE_SHEET = 'scheduleReservations';
 
   // ---------------------------------------------------------------------------
+  // 終日不在 (列単位の休診日) — closures シート
+  //   整形診察室など特定の列を「琢郎不在」等のラベルで終日埋めるための設定。
+  //   1行 = 1日 × 1機械(列)。存在すれば不在、削除すれば解除 (トグル)。
+  // ---------------------------------------------------------------------------
+
+  const CLOSURE_SHEET = 'closures';
+  const CLOSURE_HEADERS = ['id', 'date', 'machineId', 'label', 'createdAt'];
+
+  /**
+   * 指定月 (省略時は全件) の終日不在設定を返す。
+   * @param {string} month - 'YYYY-MM' (任意)
+   * @param {string} machineId - 機械ID (任意・指定時はその列のみ)
+   */
+  function getClosures(month, machineId) {
+    SheetService.ensureSheet(CLOSURE_SHEET, CLOSURE_HEADERS);
+    return SheetService.findWhere(CLOSURE_SHEET, function(r) {
+      var d = String(r.date).substring(0, 10);
+      if (month && d.substring(0, 7) !== month) return false;
+      if (machineId && r.machineId !== machineId) return false;
+      return true;
+    }).map(function(r) {
+      return Object.assign({}, r, { date: String(r.date).substring(0, 10) });
+    });
+  }
+
+  /** 指定日・指定機械の不在設定を返す (なければ null) */
+  function _getClosure(date, machineId) {
+    SheetService.ensureSheet(CLOSURE_SHEET, CLOSURE_HEADERS);
+    var hits = SheetService.findWhere(CLOSURE_SHEET, function(r) {
+      return String(r.date).substring(0, 10) === String(date).substring(0, 10)
+        && r.machineId === machineId;
+    });
+    return hits.length > 0 ? hits[0] : null;
+  }
+
+  /**
+   * 終日不在をトグルする。設定済みなら解除、未設定なら設定。
+   * @param {{date: string, machineId: string, label?: string}} data
+   * @returns {{date: string, machineId: string, closed: boolean, label?: string}}
+   */
+  function toggleClosure(data) {
+    if (!data.date || !data.machineId) throw new Error('date と machineId は必須です');
+    SheetService.ensureSheet(CLOSURE_SHEET, CLOSURE_HEADERS);
+    const lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(10000);
+      var existing = SheetService.findWhere(CLOSURE_SHEET, function(r) {
+        return String(r.date).substring(0, 10) === data.date && r.machineId === data.machineId;
+      });
+      if (existing.length > 0) {
+        existing.forEach(function(r) { SheetService.deleteById(CLOSURE_SHEET, r.id); });
+        return { date: data.date, machineId: data.machineId, closed: false };
+      }
+      var record = {
+        id:        SheetService.generateId(),
+        date:      data.date,
+        machineId: data.machineId,
+        label:     data.label || '琢郎不在',
+        createdAt: _now(),
+      };
+      SheetService.insert(CLOSURE_SHEET, record);
+      return { date: data.date, machineId: data.machineId, closed: true, label: record.label };
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // 操作履歴 (予約表の 追加 / 変更 / 削除 ログ)
   // ---------------------------------------------------------------------------
 
@@ -471,6 +539,11 @@ const Reservation = (() => {
    * 同日・同機械の時間帯重複は LockService で排他制御しつつ弾く。
    */
   function upsertScheduleReservation(data) {
+    // 終日不在に設定されている列には予約を入れられない
+    var closure = _getClosure(data.date, data.machineId);
+    if (closure) {
+      throw new Error('この日のこの列は「' + (closure.label || '終日不在') + '」に設定されています。予約する場合は不在設定を解除してください');
+    }
     if (data.id) {
       // 更新: 自身を除いた競合チェック
       var updateConflicts = _checkScheduleConflicts(
@@ -556,5 +629,6 @@ const Reservation = (() => {
     create, update, cancel, getById, getByDate, getByPatientId, getAvailableSlots, checkConflicts,
     getScheduleReservations, upsertScheduleReservation, deleteScheduleReservation,
     getScheduleHistory, setHistoryChecked,
+    getClosures, toggleClosure,
   };
 })();

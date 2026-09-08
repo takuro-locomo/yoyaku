@@ -5,7 +5,8 @@ import ScheduleGrid from '../components/ScheduleGrid';
 import ReservationModal from '../components/ReservationModal';
 import ConfirmPendingModal from '../components/ConfirmPendingModal';
 import HistoryPanel from '../components/HistoryPanel';
-import { useMasters, useScheduleReservations, useUpsertScheduleReservation, useDeleteScheduleReservation } from '../api/hooks';
+import AbsenceCalendarModal from '../components/AbsenceCalendarModal';
+import { useMasters, useScheduleReservations, useUpsertScheduleReservation, useDeleteScheduleReservation, useClosures } from '../api/hooks';
 
 type Period = 'morning' | 'afternoon';
 
@@ -98,6 +99,7 @@ export default function Schedule() {
   const [pendingR,    setPendingR]    = useState<ScheduleReservation | undefined>();
 
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [absenceOpen, setAbsenceOpen] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -125,6 +127,18 @@ export default function Schedule() {
   const dayReservations = useMemo(
     () => apiReservations.filter(r => (r.date ?? '').substring(0, 10) === date),
     [apiReservations, date],
+  );
+
+  // ── 終日不在（整形診察室の休診日）──
+  const ABSENCE_LABEL = '琢郎不在';
+  const { data: monthClosures = [] } = useClosures(date.substring(0, 7));
+  const seikeiArea      = machineAreas.find(a => a.name.includes('整形診察'));
+  const seikeiMachineId = seikeiArea?.machines[0]?.id ?? 'm-sei';
+  const dayClosures = useMemo(
+    () => monthClosures
+      .filter(c => c.date === date)
+      .map(c => ({ machineId: c.machineId, label: c.label || ABSENCE_LABEL })),
+    [monthClosures, date],
   );
 
   const openNew = (machineId: string, timeSlot: string) => {
@@ -208,6 +222,13 @@ export default function Schedule() {
             <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-full font-semibold text-xs whitespace-nowrap">
               {dayReservations.length}件
             </span>
+
+            {/* 不在設定ボタン */}
+            <button
+              onClick={() => setAbsenceOpen(true)}
+              className="p-1.5 rounded-lg bg-slate-100 text-slate-500 text-xs"
+              title="不在設定"
+            >🚫</button>
 
             {/* 変更履歴ボタン */}
             <button
@@ -310,6 +331,11 @@ export default function Schedule() {
               ))}
             </div>
 
+            <button onClick={() => setAbsenceOpen(true)}
+              className="flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-rose-50 text-slate-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+              🚫 不在設定
+            </button>
+
             <button onClick={() => setHistoryOpen(true)}
               className="flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
               🕘 変更履歴
@@ -378,6 +404,7 @@ export default function Schedule() {
           staff={scheduleStaff}
           timeSlots={timeSlots}
           reservations={dayReservations}
+          closures={dayClosures}
           onCellClick={openNew}
           onReservationClick={openEdit}
         />
@@ -413,6 +440,14 @@ export default function Schedule() {
         onClose={() => setHistoryOpen(false)}
         machines={allMachines}
         staff={scheduleStaff}
+      />
+
+      <AbsenceCalendarModal
+        open={absenceOpen}
+        onClose={() => setAbsenceOpen(false)}
+        machineId={seikeiMachineId}
+        columnName={seikeiArea?.name ?? '整形診察室'}
+        label={ABSENCE_LABEL}
       />
     </div>
   );

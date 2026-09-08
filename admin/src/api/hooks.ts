@@ -1,6 +1,6 @@
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import { gasGet, gasPost } from './gasClient';
-import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Service, Patient, Reservation, HistoryEntry, CheckRole } from '../types';
+import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Service, Patient, Reservation, HistoryEntry, CheckRole, Closure } from '../types';
 
 // ---------------------------------------------------------------------------
 // 型定義
@@ -104,6 +104,53 @@ export function useDeleteScheduleReservation() {
       );
       // 削除を履歴パネルに反映
       qc.invalidateQueries({ queryKey: ['scheduleHistory'] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 終日不在 (列単位の休診日)
+// ---------------------------------------------------------------------------
+
+/** 指定月 (YYYY-MM) の終日不在設定を取得する */
+export function useClosures(month: string) {
+  return useQuery<Closure[]>({
+    queryKey: ['closures', month],
+    queryFn:  async () => {
+      const data = await gasGet<Closure[]>('getClosures', { month });
+      return data.map(c => ({ ...c, date: (c.date ?? '').substring(0, 10) }));
+    },
+    staleTime: 30 * 1000,
+    retry: 1,
+  });
+}
+
+/**
+ * 終日不在のトグル。タップで設定⇔解除。
+ * 楽観的更新でカレンダーUIを即時反映し、失敗時はロールバックする。
+ */
+export function useToggleClosure() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { date: string; machineId: string; label?: string }) =>
+      gasPost<{ date: string; machineId: string; closed: boolean; label?: string }>('toggleClosure', vars),
+    onMutate: async (vars) => {
+      const month = vars.date.substring(0, 7);
+      await qc.cancelQueries({ queryKey: ['closures', month] });
+      const prev = qc.getQueryData<Closure[]>(['closures', month]);
+      qc.setQueryData<Closure[]>(['closures', month], (old = []) => {
+        const exists = old.some(c => c.date === vars.date && c.machineId === vars.machineId);
+        return exists
+          ? old.filter(c => !(c.date === vars.date && c.machineId === vars.machineId))
+          : [...old, { id: `optimistic-${vars.date}`, date: vars.date, machineId: vars.machineId, label: vars.label ?? '琢郎不在' }];
+      });
+      return { prev, month };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx) qc.setQueryData(['closures', ctx.month], ctx.prev);
+    },
+    onSettled: (_res, _err, vars) => {
+      qc.invalidateQueries({ queryKey: ['closures', vars.date.substring(0, 7)] });
     },
   });
 }

@@ -154,6 +154,13 @@ function _route(action, params) {
     case 'getScheduleHistory':
       return _buildResponse({ success: true, data: Reservation.getScheduleHistory(params.days) });
 
+    // --- 終日不在 (列単位の休診日) ---
+    case 'getClosures':
+      return _buildResponse({ success: true, data: Reservation.getClosures(params.month, params.machineId) });
+
+    case 'toggleClosure':
+      return _buildResponse({ success: true, data: Reservation.toggleClosure(params) });
+
     case 'setHistoryChecked':
       return _buildResponse({ success: true, data: Reservation.setHistoryChecked(params.id, params.role, params.checked) });
 

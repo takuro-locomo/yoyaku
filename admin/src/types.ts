@@ -103,6 +103,15 @@ export interface ScheduleReservation {
   createdAt?: string;  // ISO8601 (直近追加の太枠表示に使う)
 }
 
+// 終日不在 (列単位の休診日)。1件 = 1日 × 1機械(列)。
+export interface Closure {
+  id: string;
+  date: string;      // YYYY-MM-DD
+  machineId: string;
+  label: string;     // 例: 琢郎不在
+  createdAt?: string;
+}
+
 // 予約表の操作履歴 (追加 / 変更 / 削除 ログ)
 export interface HistoryEntry {
   id: string;
