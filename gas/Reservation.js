@@ -539,10 +539,13 @@ const Reservation = (() => {
    * 同日・同機械の時間帯重複は LockService で排他制御しつつ弾く。
    */
   function upsertScheduleReservation(data) {
-    // 終日不在に設定されている列には予約を入れられない
-    var closure = _getClosure(data.date, data.machineId);
-    if (closure) {
-      throw new Error('この日のこの列は「' + (closure.label || '終日不在') + '」に設定されています。予約する場合は不在設定を解除してください');
+    // 終日不在に設定されている列には「新規」予約を入れられない。
+    // 既存予約の編集・削除は許可する（不在設定は既存予約を消さない方針）。
+    if (!data.id) {
+      var closure = _getClosure(data.date, data.machineId);
+      if (closure) {
+        throw new Error('この日のこの列は「' + (closure.label || '終日不在') + '」に設定されています。新規予約する場合は不在設定を解除してください');
+      }
     }
     if (data.id) {
       // 更新: 自身を除いた競合チェック

@@ -33,6 +33,31 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
   const getTreatment = (id: string) => mockTreatments.find(t => t.id === id);
   const getStaff     = (id: string) => staff.find(s => s.id === id);
 
+  // 終日不在の列: 予約が入っていない「空き区間」だけを斜線マスで結合して埋める。
+  // 既存予約のマスはそのまま表示する (不在設定は予約を消さない)。
+  // ラベルは一番長い空き区間に1回だけ表示する。
+  const closureSegments = new Map<string, { start: number; len: number; withLabel: boolean }[]>();
+  closureMap.forEach((_label, machineId) => {
+    const busy = new Set<number>();
+    timeSlots.forEach((slot, idx) => {
+      const k = `${machineId}-${slot}`;
+      if (reservationMap.has(k) || occupiedSet.has(k)) busy.add(idx);
+    });
+    const segs: { start: number; len: number; withLabel: boolean }[] = [];
+    let i = 0;
+    while (i < timeSlots.length) {
+      if (busy.has(i)) { i++; continue; }
+      let j = i;
+      while (j < timeSlots.length && !busy.has(j)) j++;
+      segs.push({ start: i, len: j - i, withLabel: false });
+      i = j;
+    }
+    if (segs.length > 0) {
+      segs.reduce((a, b) => (b.len > a.len ? b : a)).withLabel = true;
+    }
+    closureSegments.set(machineId, segs);
+  });
+
   // 直近5日以内に追加された予約は太枠で表示する
   const RECENT_DAYS = 5;
   const isRecent = (r: ScheduleReservation) => {
@@ -138,14 +163,15 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
                 {ALL_MACHINES.map(machine => {
                   const key = `${machine.id}-${slot}`;
 
-                  // 終日不在の列: 先頭行で全行結合の1マスを描き、以降の行はスキップ
+                  // 終日不在の列: 空きマスは斜線の結合マスにする (予約マスは下の通常描画でそのまま表示)
                   const closureLabel = closureMap.get(machine.id);
-                  if (closureLabel !== undefined) {
-                    if (slotIdx !== 0) return null;
+                  if (closureLabel !== undefined && !reservationMap.has(key) && !occupiedSet.has(key)) {
+                    const seg = closureSegments.get(machine.id)?.find(s => s.start === slotIdx);
+                    if (!seg) return null; // 直前の斜線マスの rowSpan に含まれる
                     return (
                       <td
                         key={machine.id}
-                        rowSpan={timeSlots.length}
+                        rowSpan={seg.len}
                         className="border border-slate-300 text-center align-middle select-none"
                         style={{
                           backgroundImage:
@@ -153,12 +179,18 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
                         }}
                         title={`${closureLabel}（終日）`}
                       >
-                        <div
-                          className="mx-auto font-bold text-slate-500 tracking-[0.3em]"
-                          style={{ writingMode: 'vertical-rl', fontSize: '15px' }}
-                        >
-                          {closureLabel}
-                        </div>
+                        {seg.withLabel && (
+                          seg.len >= 3 ? (
+                            <div
+                              className="mx-auto font-bold text-slate-500 tracking-[0.3em]"
+                              style={{ writingMode: 'vertical-rl', fontSize: '15px' }}
+                            >
+                              {closureLabel}
+                            </div>
+                          ) : (
+                            <div className="font-bold text-slate-500 text-[10px]">{closureLabel}</div>
+                          )
+                        )}
                       </td>
                     );
                   }

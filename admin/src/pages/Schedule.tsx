@@ -6,6 +6,7 @@ import ReservationModal from '../components/ReservationModal';
 import ConfirmPendingModal from '../components/ConfirmPendingModal';
 import HistoryPanel from '../components/HistoryPanel';
 import AbsenceCalendarModal from '../components/AbsenceCalendarModal';
+import MonthDatePicker from '../components/MonthDatePicker';
 import { useMasters, useScheduleReservations, useUpsertScheduleReservation, useDeleteScheduleReservation, useClosures } from '../api/hooks';
 
 type Period = 'morning' | 'afternoon';
@@ -100,6 +101,7 @@ export default function Schedule() {
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [absenceOpen, setAbsenceOpen] = useState(false);
+  const [pickerOpen,  setPickerOpen]  = useState(false);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -200,6 +202,11 @@ export default function Schedule() {
                 date === today ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600'
               }`}
             >今日</button>
+            <button
+              onClick={() => setPickerOpen(true)}
+              className="p-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs"
+              title="カレンダーで日付を選ぶ"
+            >📅</button>
 
             <div className="flex-1" />
 
@@ -300,6 +307,11 @@ export default function Schedule() {
                 date === today ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
               }`}
             >今日</button>
+            <button
+              onClick={() => setPickerOpen(true)}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+              title="カレンダーで日付を選ぶ"
+            >📅 カレンダー</button>
 
             <div className="w-px h-5 bg-slate-200" />
 
@@ -448,6 +460,13 @@ export default function Schedule() {
         machineId={seikeiMachineId}
         columnName={seikeiArea?.name ?? '整形診察室'}
         label={ABSENCE_LABEL}
+      />
+
+      <MonthDatePicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        value={date}
+        onSelect={setDate}
       />
     </div>
   );
