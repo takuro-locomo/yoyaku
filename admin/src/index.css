@@ -8,6 +8,11 @@
     margin: 8mm;
   }
 
+  /* 画面用の表示ズームは印刷に持ち込まない (印刷は従来どおり専用のzoomで調整) */
+  .grid-zoom-wrap {
+    zoom: 1 !important;
+  }
+
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;

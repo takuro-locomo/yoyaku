@@ -103,6 +103,13 @@ export default function Schedule() {
   const [absenceOpen, setAbsenceOpen] = useState(false);
   const [pickerOpen,  setPickerOpen]  = useState(false);
 
+  // 日付タブ(週の並び)の折りたたみ。設定はブラウザに記憶する
+  const [tabsHidden, setTabsHidden] = useState(() => localStorage.getItem('scheduleTabsHidden') === '1');
+  const toggleTabs = () => setTabsHidden(v => {
+    localStorage.setItem('scheduleTabsHidden', v ? '' : '1');
+    return !v;
+  });
+
   const [error, setError] = useState<string | null>(null);
 
   const weekDays = useMemo(() => getWeekDays(date), [date]);
@@ -181,6 +188,10 @@ export default function Schedule() {
   const dateLabel   = new Date(date + 'T00:00:00').toLocaleDateString('ja-JP', {
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'short',
   });
+  const shortDateLabel = (() => {
+    const d0 = new Date(date + 'T00:00:00');
+    return `${d0.getMonth() + 1}/${d0.getDate()}(${DOW_LABELS[d0.getDay()]})`;
+  })();
   const periodLabel = period === 'morning' ? '午前' : '午後';
 
   return (
@@ -285,12 +296,20 @@ export default function Schedule() {
             </div>
           )}
 
-          {/* 日付タブ（横スクロール） */}
-          <div className="flex gap-1.5 px-2 pb-2 overflow-x-auto">
-            {weekDays.map(day => (
-              <DayTab key={day} day={day} isSelected={day === date} isToday={day === today} onClick={() => setDate(day)} />
-            ))}
-          </div>
+          {/* 日付タブ（横スクロール・折りたたみ可） */}
+          {!tabsHidden && (
+            <div className="flex gap-1.5 px-2 pb-1 overflow-x-auto">
+              {weekDays.map(day => (
+                <DayTab key={day} day={day} isSelected={day === date} isToday={day === today} onClick={() => setDate(day)} />
+              ))}
+            </div>
+          )}
+          <button
+            onClick={toggleTabs}
+            className="w-full text-center text-[10px] text-slate-400 pb-1.5 select-none"
+          >
+            {tabsHidden ? `▼ 日付タブを表示（${shortDateLabel}）` : '▲ 日付タブをたたむ'}
+          </button>
         </div>
 
         {/* ── PC用ツールバー（既存） ── */}
@@ -361,11 +380,22 @@ export default function Schedule() {
 
           {/* 行2 */}
           <div className="flex items-end gap-3 px-5 pb-3 flex-wrap">
-            <div className="flex gap-1.5">
-              {weekDays.map(day => (
-                <DayTab key={day} day={day} isSelected={day === date} isToday={day === today} onClick={() => setDate(day)} />
-              ))}
-            </div>
+            <button
+              onClick={toggleTabs}
+              className="self-center text-xs px-2 py-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+              title={tabsHidden ? '日付タブ(週の並び)を表示' : '日付タブをたたんで画面を広くする'}
+            >
+              {tabsHidden ? '▼ 日付' : '▲'}
+            </button>
+            {tabsHidden ? (
+              <span className="self-center text-sm font-bold text-slate-700">{shortDateLabel}</span>
+            ) : (
+              <div className="flex gap-1.5">
+                {weekDays.map(day => (
+                  <DayTab key={day} day={day} isSelected={day === date} isToday={day === today} onClick={() => setDate(day)} />
+                ))}
+              </div>
+            )}
             <div className="flex-1" />
             <div className="flex items-center gap-2 self-center">
               <div className="flex bg-slate-100 rounded-lg p-1 text-sm">

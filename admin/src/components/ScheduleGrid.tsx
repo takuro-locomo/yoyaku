@@ -1,5 +1,16 @@
+import { useRef, useState } from 'react';
 import type { MachineArea, ScheduleReservation, ScheduleStaff } from '../types';
 import { mockTreatments } from '../mock/scheduleData';
+
+const ZOOM_KEY  = 'scheduleGridZoom';
+const ZOOM_MIN  = 0.4;
+const ZOOM_MAX  = 1;
+const ZOOM_STEP = 0.1;
+
+function loadZoom(): number {
+  const v = Number(localStorage.getItem(ZOOM_KEY));
+  return v >= ZOOM_MIN && v <= ZOOM_MAX ? v : 1;
+}
 
 interface Props {
   machineAreas: MachineArea[];
@@ -77,13 +88,62 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
    */
   const PRINT_ROW_H = Math.floor((1512 - 50) / timeSlots.length);
 
+  // ── 表示ズーム (チャートの縮小 ⇔ 等倍・1画面フィット) ──
+  const [zoom, setZoom]  = useState(loadZoom);
+  const scrollRef   = useRef<HTMLDivElement>(null);
+  const zoomWrapRef = useRef<HTMLDivElement>(null);
+
+  const applyZoom = (z: number) => {
+    const clamped = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) * 100) / 100;
+    setZoom(clamped);
+    localStorage.setItem(ZOOM_KEY, String(clamped));
+  };
+
+  /** スクロールせずに全体が見えるズーム率へ (高さ・幅の両方が収まるように) */
+  const fitToScreen = () => {
+    const scroll = scrollRef.current;
+    const wrap   = zoomWrapRef.current;
+    if (!scroll || !wrap) return;
+    const naturalH = wrap.getBoundingClientRect().height / zoom; // 等倍換算の高さ
+    const zH = (scroll.clientHeight - 6) / naturalH;
+    const zW = (scroll.clientWidth  - 6) / 1050; // テーブルの最小幅 1050px 基準
+    applyZoom(Math.min(1, zH, zW));
+  };
+
   return (
     <div className="flex flex-col h-full">
-      <div className="flex justify-end items-center gap-1 pb-1 pr-1 text-[10px] text-slate-500 shrink-0 print:hidden">
+      <div className="flex items-center gap-1 pb-1 px-1 text-[10px] text-slate-500 shrink-0 print:hidden">
+        {/* ── ズームコントロール ── */}
+        <span className="font-medium text-slate-400">表示</span>
+        <button
+          onClick={() => applyZoom(zoom - ZOOM_STEP)}
+          className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold leading-none"
+          title="縮小"
+        >−</button>
+        <span className="w-9 text-center font-semibold text-slate-600 tabular-nums">{Math.round(zoom * 100)}%</span>
+        <button
+          onClick={() => applyZoom(zoom + ZOOM_STEP)}
+          className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold leading-none"
+          title="拡大"
+        >＋</button>
+        <button
+          onClick={fitToScreen}
+          className="h-6 px-2 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium"
+          title="スクロールせず全体が見えるサイズにする"
+        >1画面</button>
+        {zoom !== 1 && (
+          <button
+            onClick={() => applyZoom(1)}
+            className="h-6 px-2 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium"
+            title="等倍に戻す"
+          >100%</button>
+        )}
+        <div className="flex-1" />
         <span className="inline-block w-3.5 h-3.5 rounded-[3px] bg-white border-2 border-slate-700" />
         太枠 = 直近5日で追加した予約
       </div>
-      <div className="flex-1 overflow-auto schedule-scroll print:overflow-visible">
+      <div ref={scrollRef} className="flex-1 overflow-auto schedule-scroll print:overflow-visible">
+      <div ref={zoomWrapRef} className="grid-zoom-wrap" style={{ zoom }}>
       <table
         className="border-collapse text-xs schedule-grid-table"
         style={{
@@ -273,6 +333,7 @@ export default function ScheduleGrid({ machineAreas, staff, timeSlots, reservati
           })}
         </tbody>
       </table>
+      </div>
       </div>
     </div>
   );
