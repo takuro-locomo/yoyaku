@@ -119,8 +119,10 @@ function generateSlots(startH: number, startM: number, endH: number, endM: numbe
   return slots;
 }
 
-export const MORNING_SLOTS   = generateSlots(9,  0, 12, 45);
-export const AFTERNOON_SLOTS = generateSlots(13, 0, 20, 0);
+// 午前 9:00〜12:00（最終枠 11:45）／午後 12:00〜21:00（最終枠 20:45）
+// ※表示上の区切りのみ。予約データの時刻は変えない（12:00〜12:45 の既存予約は午後タブに出る）
+export const MORNING_SLOTS   = generateSlots(9,  0, 11, 45);
+export const AFTERNOON_SLOTS = generateSlots(12, 0, 20, 45);
 
 // ---------------------------------------------------------------------------
 // Treatment master  ※ 施術種別 (変更頻度低 → フロントで保持)

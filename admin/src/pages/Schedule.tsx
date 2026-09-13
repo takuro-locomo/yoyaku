@@ -409,7 +409,7 @@ export default function Schedule() {
                     className={`px-4 py-1.5 rounded-md font-medium transition-colors whitespace-nowrap ${
                       period === p ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'
                     }`}
-                  >{p === 'morning' ? '午前 9:00〜12:45' : '午後 13:00〜18:45'}</button>
+                  >{p === 'morning' ? '午前 9:00〜12:00' : '午後 12:00〜21:00'}</button>
                 ))}
               </div>
               <span className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full font-semibold text-xs whitespace-nowrap">
