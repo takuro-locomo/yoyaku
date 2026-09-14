@@ -301,9 +301,9 @@ const LineHandler = (() => {
    * 下の EXTRA_NOTIFY_EMAILS を合わせたもの（重複は除外）。
    * GAS の MailApp は無料で1日100通まで送信可能。
    */
-  var EXTRA_NOTIFY_EMAILS = 'uenoiin2016@gmail.com';
+  var EXTRA_NOTIFY_EMAILS = '';
   // 予約検出メールを送らない宛先（STAFF_EMAIL プロパティに残っていても除外する）
-  var EXCLUDE_NOTIFY_EMAILS = ['uenoiinkarute@gmail.com'];
+  var EXCLUDE_NOTIFY_EMAILS = ['uenoiinkarute@gmail.com', 'uenoiin2016@gmail.com'];
 
   function _sendEmailNotify(patientName, messageText, detectedDate, detectedTime) {
     var staffEmail = PropertiesService.getScriptProperties().getProperty('STAFF_EMAIL') || '';
