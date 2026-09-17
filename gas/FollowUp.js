@@ -20,7 +20,7 @@ const FollowUp = (() => {
   const SHEET_SENDLOG = '配信ログ';
   // ユーザー別サマリーの列位置（SegmentSummary.HEADERS と対応）
   const COL = {
-    userId: 0, name: 1, last: 3, total: 4, reserveBtn: 5,
+    userId: 0, name: 1, first: 2, last: 3, total: 4, reserveBtn: 5,
     cv: 12, blocked: 13, level: 14, interest: 15, followUp: 16,
     stage: 17, lastSend: 18, stageMemo: 19, stageManual: 20, lastTalk: 21, lastCv: 22,
   };
@@ -40,6 +40,12 @@ const FollowUp = (() => {
       note: '全員「予約経験あり」の人です。「ぜひ一度」など新規向けの文面はNG。お久しぶりの再来院を促す文面で。' },
     purpose_loyal:    { label: '🎯ロイヤル顧客（予約2回以上のリピーター）', purpose: 'loyal',
       note: '全員「予約2回以上」のリピーターです。特別感・優先案内・感謝の訴求が有効。新規向け文面はNG。' },
+    // 一斉送信ミックス: 前半＝最近登録した未予約の人（反応の多い順・最大100人）、
+    // 後半＝予約経験があるのに一定期間（既定30日）ご無沙汰の人。合計200人まで。
+    purpose_mix200:   { label: '🎯一斉送信ミックス200（新規6週×未予約 最大100＋1ヶ月以上ご無沙汰の再来）',
+      purpose: 'mix', newWeeks: 6, newCap: 100, rebookDays: 30, totalCap: 200,
+      note: '前半は「予約0回・最近登録」、後半は「予約経験あり・1ヶ月以上ご無沙汰」の人が混ざっています。'
+        + '「ぜひ一度」も「いつもありがとうございます」も片方には合わないので、どちらが読んでも違和感のない文面にしてください。' },
     purpose_all:      { label: '🎯新製品・お知らせ（送信可能な全員）', purpose: 'all',
       note: '新規もリピーターも混ざっています。誰が読んでも違和感のない中立な文面にしてください（「ぜひ一度」「いつもありがとう」はNG）。' },
     engaged:      { label: '開封見込み順（今日送った人は除外）', excludeDays: 1 },
@@ -302,6 +308,72 @@ const FollowUp = (() => {
           return true;
         });
         picked.sort(function (a, b) { return cvOf(b) - cvOf(a); });
+      } else if (g.purpose === 'mix') {
+        // 一斉送信ミックス:
+        //  A) 直近 newWeeks 週に登録（初回接触）した未予約の人。いろいろボタンを押している人ほど上。最大 newCap 人
+        //  B) 予約経験があるのに最終予約から rebookDays 日以上あいている人。古い順に、合計 totalCap 人まで
+        var newCutoffMs = Date.now() - (g.newWeeks * 7) * 86400000;
+        var rebookCutoffMs = Date.now() - g.rebookDays * 86400000;
+        var btnKinds = function (r) {
+          var k = 0;
+          for (var c = 5; c <= 10; c++) if ((Number(r[c]) || 0) > 0) k++;
+          return k;
+        };
+        var btnTotal = function (r) {
+          var t = 0;
+          for (var c = 5; c <= 10; c++) t += (Number(r[c]) || 0);
+          return t;
+        };
+        var asDate = function (v) {
+          if (v instanceof Date) return v;
+          var d = new Date(v);
+          return isNaN(d.getTime()) ? null : d;
+        };
+
+        var groupA = base2.filter(function (r) {
+          if (cvOf(r) !== 0) return false;
+          var first = asDate(r[COL.first]);
+          if (!first || first.getTime() < newCutoffMs) return false;
+          purposeInfo[r[COL.userId]] = '登録 ' + _fmt(first) + '・未予約'
+            + (btnKinds(r) ? '・ボタン' + btnKinds(r) + '種' + btnTotal(r) + '回' : '・ボタン反応なし');
+          return true;
+        });
+        // いろいろ押している人を優先: ボタン種類数 → 総回数 → 予約ボタン回数 → 登録が新しい順
+        groupA.sort(function (a, b) {
+          var ka = btnKinds(a), kb = btnKinds(b);
+          if (kb !== ka) return kb - ka;
+          var ta = btnTotal(a), tb = btnTotal(b);
+          if (tb !== ta) return tb - ta;
+          var ra = Number(a[COL.reserveBtn]) || 0, rb = Number(b[COL.reserveBtn]) || 0;
+          if (rb !== ra) return rb - ra;
+          var fa = asDate(a[COL.first]), fb = asDate(b[COL.first]);
+          return (fb ? fb.getTime() : 0) - (fa ? fa.getTime() : 0);
+        });
+        groupA = groupA.slice(0, g.newCap);
+
+        var inA = {};
+        groupA.forEach(function (r) { inA[r[COL.userId]] = 1; });
+
+        var groupB = base2.filter(function (r) {
+          if (inA[r[COL.userId]]) return false;
+          if (cvOf(r) < 1) return false;
+          var lc = asDate(r[COL.lastCv]);
+          if (!lc) {
+            purposeInfo[r[COL.userId]] = '予約' + cvOf(r) + '回（最終予約日は不明）';
+            return true;
+          }
+          if (lc.getTime() >= rebookCutoffMs) return false;
+          purposeInfo[r[COL.userId]] = '予約' + cvOf(r) + '回・最終予約 ' + _fmt(lc);
+          return true;
+        });
+        // 最終予約が古い順（日付不明は先頭）
+        groupB.sort(function (a, b) {
+          var da = asDate(a[COL.lastCv]), db = asDate(b[COL.lastCv]);
+          return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
+        });
+        groupB = groupB.slice(0, Math.max(0, g.totalCap - groupA.length));
+
+        picked = groupA.concat(groupB);
       } else {
         // 'all': 新製品・お知らせ（送信可能な全員）
         picked = base2;
@@ -641,13 +713,45 @@ const FollowUp = (() => {
   function _buildMessages(text, media) {
     text = String(text || '').trim();
     var imageUrl = (media && media.imageUrl) ? String(media.imageUrl).trim() : '';
-    if (!text && !imageUrl) throw new Error('メッセージか画像URLのどちらかを入力してください。');
+    var hasPanels = !!(media && media.panels && media.panels.length);
+    if (!text && !imageUrl && !hasPanels) throw new Error('メッセージか画像URLのどちらかを入力してください。');
     if (text.length > 1000) throw new Error('メッセージが長すぎます（1000文字まで）。');
 
     // メッセージ組み立て（テキスト→画像の順・最大2吹き出し）
     var messages = [];
     var logTag = '';
     if (text) messages.push({ type: 'text', text: text });
+
+    // 3分割リッチメッセージ: 画像を縦に並べた1つの吹き出し。段ごとに別のキーワードを送信し、
+    // それぞれの自動応答（Reply API・通数消費なし）が返る。消費は1人1通のまま。
+    var panels = (media && media.panels && media.panels.length) ? media.panels : null;
+    if (panels) {
+      if (panels.length < 2 || panels.length > 4) throw new Error('分割は2〜4段にしてください。');
+      var ratio = { '2:1': '2:1', '1:1': '1:1', '3:1': '3:1', '16:9': '16:9' }[media.aspect] || '2:1';
+      var boxes = panels.map(function (p, i) {
+        var u = String(p.imageUrl || '').trim();
+        var kw = String(p.keyword || '').trim();
+        if (u.indexOf('https://') !== 0) throw new Error((i + 1) + '段目の画像URLは https:// で始まる必要があります。');
+        if (!kw) throw new Error((i + 1) + '段目のキーワードを入力してください。');
+        if (kw.length > 50) throw new Error((i + 1) + '段目のキーワードは50文字までにしてください。');
+        AutoReply.save(kw, p.replyText);   // 本文が空ならここでエラーになる
+        return {
+          type: 'image', url: u, size: 'full',
+          aspectRatio: ratio, aspectMode: 'cover',
+          action: { type: 'message', label: kw.slice(0, 20), text: kw },
+        };
+      });
+      messages.push({
+        type: 'flex',
+        altText: text ? text.slice(0, 100) : 'お知らせが届いています',
+        contents: {
+          type: 'bubble',
+          body: { type: 'box', layout: 'vertical', contents: boxes, paddingAll: '0px', spacing: 'none' },
+        },
+      });
+      logTag = '[🖼' + panels.length + '分割→応答:' + panels.map(function (p) { return p.keyword; }).join('/') + '] ';
+      return { messages: messages, logTag: logTag };
+    }
     if (imageUrl) {
       if (imageUrl.indexOf('https://') !== 0) throw new Error('画像URLは https:// で始まる必要があります。');
       var tap = (media.tap === 'url' || media.tap === 'keyword') ? media.tap : 'none';

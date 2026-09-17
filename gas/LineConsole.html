@@ -62,6 +62,7 @@
         <option value="purpose_rebook_2m">再予約促進（最終予約から2ヶ月以上）</option>
         <option value="purpose_rebook_3m">再予約促進（最終予約から3ヶ月以上）</option>
         <option value="purpose_loyal">ロイヤル顧客（予約2回以上）</option>
+        <option value="purpose_mix200">一斉送信ミックス200（新規6週×未予約 最大100＋1ヶ月以上ご無沙汰の再来）</option>
         <option value="purpose_all">新製品・お知らせ（送信可能な全員）</option>
       </optgroup>
       <optgroup label="一斉送信・リピート促進">
@@ -151,7 +152,23 @@
       <option value="">テンプレートから選ぶ…（リスト更新後に表示）</option>
     </select>
     <textarea id="msg" placeholder="例）いつもありがとうございます。ただいま◯◯キャンペーン中です。ご希望の方はこのトークにご返信ください😊"></textarea>
-    <div style="margin-top:10px;background:#f3f4f6;border-radius:8px;padding:8px 10px">
+    <div style="margin-top:10px;background:#eef6ff;border-radius:8px;padding:8px 10px">
+      <label style="font-size:13px">
+        <input type="checkbox" id="panelMode" onchange="updatePanelMode()" style="width:18px;height:18px;vertical-align:-4px">
+        🧱 3分割のリッチメッセージにする（段ごとに別の案内が届く）
+      </label>
+      <div id="panelBox" style="display:none">
+        <div id="panelRows"></div>
+        <select id="panelAspect">
+          <option value="2:1">1段の形: 横長 2:1（推奨・1040×520）</option>
+          <option value="3:1">1段の形: 細長 3:1（1040×347）</option>
+          <option value="16:9">1段の形: 16:9</option>
+          <option value="1:1">1段の形: 正方形 1:1</option>
+        </select>
+        <span class="note">画像を縦に積んだ1枚のカードとして届きます。<b>消費は1人1通のまま</b>。段をタップするとその段のキーワードが相手のトークに送信され、自動応答（無料）が返ります。上の「画像をつける」欄は使いません。</span>
+      </div>
+    </div>
+    <div id="singleImgBox" style="margin-top:10px;background:#f3f4f6;border-radius:8px;padding:8px 10px">
       <label style="font-size:13px">🖼 画像をつける（リッチ配信・任意）</label>
       <input type="text" id="imgUrl" placeholder="画像URL（https://…）※HPのメディアにアップしてURLをコピー">
       <select id="imgTap" onchange="updateImgTap()">
@@ -285,7 +302,55 @@
     document.getElementById('imgKwBox').style.display = (tap === 'keyword') ? '' : 'none';
     document.getElementById('imgAspect').style.display = (tap === 'none') ? 'none' : '';
   }
+  // ---- 3分割リッチメッセージ ----
+  function renderPanelRows() {
+    var box = document.getElementById('panelRows');
+    if (box.dataset.ready) return;
+    var html = '';
+    for (var i = 1; i <= 3; i++) {
+      html += '<div style="background:#fff;border-radius:8px;padding:8px 10px;margin-top:8px">'
+        + '<label style="font-size:13px">' + i + '段目</label>'
+        + '<input type="text" id="pImg' + i + '" placeholder="画像URL（https://…）">'
+        + '<input type="text" id="pKw' + i + '" placeholder="タップで送るキーワード（例: 全身脱毛コースについて）">'
+        + '<textarea id="pReply' + i + '" style="min-height:70px" placeholder="自動応答の本文（タップした人にだけ届く・無料）"></textarea>'
+        + '</div>';
+    }
+    box.innerHTML = html;
+    box.dataset.ready = '1';
+  }
+  function updatePanelMode() {
+    var on = document.getElementById('panelMode').checked;
+    document.getElementById('panelBox').style.display = on ? '' : 'none';
+    document.getElementById('singleImgBox').style.display = on ? 'none' : '';
+    if (on) renderPanelRows();
+  }
+  function buildPanels() {
+    if (!document.getElementById('panelMode').checked) return null;
+    var panels = [];
+    for (var i = 1; i <= 3; i++) {
+      var u = (document.getElementById('pImg' + i) || {}).value || '';
+      var k = (document.getElementById('pKw' + i) || {}).value || '';
+      var r = (document.getElementById('pReply' + i) || {}).value || '';
+      u = u.trim(); k = k.trim(); r = r.trim();
+      if (!u && !k && !r) continue;   // 空の段は飛ばす（2段でも送れる）
+      panels.push({ imageUrl: u, keyword: k, replyText: r });
+    }
+    if (!panels.length) return null;
+    return { panels: panels, aspect: document.getElementById('panelAspect').value };
+  }
+  function panelError(panels) {
+    if (panels.length < 2) return '3分割にするなら2段以上入力してください（空の段は飛ばされます）。';
+    for (var i = 0; i < panels.length; i++) {
+      var n = (i + 1) + '段目';
+      if (panels[i].imageUrl.indexOf('https://') !== 0) return n + 'の画像URLは https:// で始まる必要があります。';
+      if (!panels[i].keyword) return n + 'のキーワードを入力してください。';
+      if (!panels[i].replyText) return n + 'の自動応答の本文を入力してください。';
+    }
+    return '';
+  }
   function buildMedia() {
+    var p = buildPanels();
+    if (p) return p;
     var url = document.getElementById('imgUrl').value.trim();
     if (!url) return null;
     return {
@@ -332,9 +397,11 @@
     var res = document.getElementById('result');
     var media = buildMedia();
     if (!msg && !media) { res.innerHTML = '<p class="err">メッセージか画像URLを入力してください。</p>'; return; }
-    if (media && media.imageUrl.indexOf('https://') !== 0) { res.innerHTML = '<p class="err">画像URLは https:// で始まる必要があります。</p>'; return; }
-    if (media && media.tap === 'url' && media.linkUrl.indexOf('https://') !== 0) { res.innerHTML = '<p class="err">タップで開くURLを入力してください（https://…）。</p>'; return; }
-    if (media && media.tap === 'keyword' && (!media.keyword || !media.replyText)) { res.innerHTML = '<p class="err">タップ応答のキーワードと自動応答の本文を両方入力してください。</p>'; return; }
+    var perr = (media && media.panels) ? panelError(media.panels) : '';
+    if (perr) { res.innerHTML = '<p class="err">' + perr + '</p>'; return; }
+    if (media && !media.panels && media.imageUrl.indexOf('https://') !== 0) { res.innerHTML = '<p class="err">画像URLは https:// で始まる必要があります。</p>'; return; }
+    if (media && !media.panels && media.tap === 'url' && media.linkUrl.indexOf('https://') !== 0) { res.innerHTML = '<p class="err">タップで開くURLを入力してください（https://…）。</p>'; return; }
+    if (media && !media.panels && media.tap === 'keyword' && (!media.keyword || !media.replyText)) { res.innerHTML = '<p class="err">タップ応答のキーワードと自動応答の本文を両方入力してください。</p>'; return; }
     if (!confirm('ご自分のLINEに1通だけテスト配信します（月200通の枠を1通消費）。\n初めての場合は、先にご自分のスマホから公式LINEに「テスト登録」と送っておいてください。')) return;
     res.innerHTML = '<p class="note">テスト配信中…</p>';
     google.script.run
@@ -601,9 +668,11 @@
     var sel = checked();
     var media = buildMedia();
     if (!msg && !media) { res.innerHTML = '<p class="err">メッセージか画像URLを入力してください。</p>'; return; }
-    if (media && media.imageUrl.indexOf('https://') !== 0) { res.innerHTML = '<p class="err">画像URLは https:// で始まる必要があります。</p>'; return; }
-    if (media && media.tap === 'url' && media.linkUrl.indexOf('https://') !== 0) { res.innerHTML = '<p class="err">タップで開くURLを入力してください（https://…）。</p>'; return; }
-    if (media && media.tap === 'keyword' && (!media.keyword || !media.replyText)) { res.innerHTML = '<p class="err">タップ応答のキーワードと自動応答の本文を両方入力してください。</p>'; return; }
+    var perr = (media && media.panels) ? panelError(media.panels) : '';
+    if (perr) { res.innerHTML = '<p class="err">' + perr + '</p>'; return; }
+    if (media && !media.panels && media.imageUrl.indexOf('https://') !== 0) { res.innerHTML = '<p class="err">画像URLは https:// で始まる必要があります。</p>'; return; }
+    if (media && !media.panels && media.tap === 'url' && media.linkUrl.indexOf('https://') !== 0) { res.innerHTML = '<p class="err">タップで開くURLを入力してください（https://…）。</p>'; return; }
+    if (media && !media.panels && media.tap === 'keyword' && (!media.keyword || !media.replyText)) { res.innerHTML = '<p class="err">タップ応答のキーワードと自動応答の本文を両方入力してください。</p>'; return; }
     if (!sel.length) { res.innerHTML = '<p class="err">送信先にチェックを入れてください。</p>'; return; }
     if (quota && quota.remaining != null && sel.length > quota.remaining) {
       res.innerHTML = '<p class="err">今月の残り通数（' + quota.remaining + '通）を超えています。送信先を' + quota.remaining + '人以下に減らしてください。</p>';
@@ -614,9 +683,12 @@
       : '\n（月200通の枠を' + sel.length + '通消費します）';
     var mediaMsg = '';
     if (media) {
-      mediaMsg = '\n🖼 画像つき'
-        + (media.tap === 'url' ? '（タップでリンクを開く）'
-          : media.tap === 'keyword' ? '（タップで自動応答「' + media.keyword + '」が届く設定を登録）' : '');
+      mediaMsg = media.panels
+        ? '\n🧱 ' + media.panels.length + '分割リッチメッセージ（タップで自動応答: '
+            + media.panels.map(function (p) { return p.keyword; }).join(' / ') + '）'
+        : '\n🖼 画像つき'
+          + (media.tap === 'url' ? '（タップでリンクを開く）'
+            : media.tap === 'keyword' ? '（タップで自動応答「' + media.keyword + '」が届く設定を登録）' : '');
     }
     if (!confirm(sel.length + '人に送信します。よろしいですか？' + mediaMsg + quotaMsg)) return;
     document.getElementById('btnSend').disabled = true;
