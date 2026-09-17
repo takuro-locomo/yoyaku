@@ -56,6 +56,8 @@
     <label>📦 配信プリセット（用意しておいた配信内容をまとめて読み込む）</label>
     <select id="presetSel"></select>
     <button class="mini" onclick="applyPreset()" style="margin-top:8px">この内容を読み込む</button>
+    <button class="mini" onclick="sendTestToMe()" style="margin-top:8px">🧪 テスト配信（自分に1通）</button>
+    <button class="mini" onclick="showPreview()" style="margin-top:8px">👀 プレビュー</button>
     <p class="note">グループ・本文・3分割の画像／キーワード／自動応答をまとめて入力欄に入れます。読み込んだあとは自由に直せます。<b>読み込むだけでは送信されません。</b></p>
     <div id="presetMsg"></div>
   </div>
@@ -411,6 +413,7 @@
   // ---- プレビュー（届き方と、タップ→自動応答の流れをLINE風に表示） ----
   function showPreview() {
     var el = document.getElementById('preview');
+    setTimeout(function () { el.scrollIntoView({ block: 'start' }); }, 0);   // 上のボタンから押しても見える位置へ
     var msg = document.getElementById('msg').value.trim();
     var media = buildMedia();
     if (!msg && !media) { el.innerHTML = '<p class="err">メッセージか画像URLを入力してください。</p>'; return; }
@@ -439,7 +442,11 @@
   // ---- テスト配信（「テスト登録」済みの自分のLINEに1通だけ） ----
   function sendTestToMe() {
     var msg = document.getElementById('msg').value.trim();
-    var res = document.getElementById('result');
+    // 結果は画面下の result と、上のプリセット欄の両方に出す（上のボタンから押しても見えるように）
+    var res = (function () {
+      var a = document.getElementById('result'), b = document.getElementById('presetMsg');
+      return { set innerHTML(h) { if (a) a.innerHTML = h; if (b) b.innerHTML = h; } };
+    })();
     var media = buildMedia();
     if (!msg && !media) { res.innerHTML = '<p class="err">メッセージか画像URLを入力してください。</p>'; return; }
     var perr = (media && media.panels) ? panelError(media.panels) : '';
