@@ -40,10 +40,11 @@ const FollowUp = (() => {
       note: '全員「予約経験あり」の人です。「ぜひ一度」など新規向けの文面はNG。お久しぶりの再来院を促す文面で。' },
     purpose_loyal:    { label: '🎯ロイヤル顧客（予約2回以上のリピーター）', purpose: 'loyal',
       note: '全員「予約2回以上」のリピーターです。特別感・優先案内・感謝の訴求が有効。新規向け文面はNG。' },
-    // 一斉送信ミックス: 前半＝最近登録した未予約の人（反応の多い順・最大100人）、
-    // 後半＝予約経験があるのに一定期間（既定30日）ご無沙汰の人。合計200人まで。
-    purpose_mix200:   { label: '🎯一斉送信ミックス200（新規6週×未予約 最大100＋1ヶ月以上ご無沙汰の再来）',
-      purpose: 'mix', newWeeks: 6, newCap: 100, rebookDays: 30, totalCap: 200,
+    // 一斉送信ミックス: 前半＝最近登録した未予約の人（反応の多い順）、
+    // 後半＝予約経験があるのに一定期間（既定30日）ご無沙汰の人。合計 totalCap 人まで。
+    // 無料プランの残り通数に合わせて totalCap を調整する（テスト配信1通を引いて199など）。
+    purpose_mix200:   { label: '🎯一斉送信ミックス（新規8週×未予約＋1ヶ月以上ご無沙汰の再来・上限199人）',
+      purpose: 'mix', newWeeks: 8, newCap: 199, rebookDays: 30, totalCap: 199,
       note: '前半は「予約0回・最近登録」、後半は「予約経験あり・1ヶ月以上ご無沙汰」の人が混ざっています。'
         + '「ぜひ一度」も「いつもありがとうございます」も片方には合わないので、どちらが読んでも違和感のない文面にしてください。' },
     purpose_all:      { label: '🎯新製品・お知らせ（送信可能な全員）', purpose: 'all',
@@ -349,13 +350,7 @@ const FollowUp = (() => {
           var fa = asDate(a[COL.first]), fb = asDate(b[COL.first]);
           return (fb ? fb.getTime() : 0) - (fa ? fa.getTime() : 0);
         });
-        groupA = groupA.slice(0, g.newCap);
-
-        var inA = {};
-        groupA.forEach(function (r) { inA[r[COL.userId]] = 1; });
-
         var groupB = base2.filter(function (r) {
-          if (inA[r[COL.userId]]) return false;
           if (cvOf(r) < 1) return false;
           var lc = asDate(r[COL.lastCv]);
           if (!lc) {
@@ -371,9 +366,13 @@ const FollowUp = (() => {
           var da = asDate(a[COL.lastCv]), db = asDate(b[COL.lastCv]);
           return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
         });
-        groupB = groupB.slice(0, Math.max(0, g.totalCap - groupA.length));
-
-        picked = groupA.concat(groupB);
+        // 枠の配り方: 再来(B)を先に確保し、残りを新規(A)に回す。
+        // こうすると supply があるかぎり totalCap ぴったりまで埋まる。
+        var bTake = Math.min(groupB.length, g.rebookCap || groupB.length, g.totalCap);
+        var aTake = Math.max(0, Math.min(groupA.length, g.newCap, g.totalCap - bTake));
+        // Aが足りなければBを増やして埋める
+        bTake = Math.min(groupB.length, g.totalCap - aTake);
+        picked = groupA.slice(0, aTake).concat(groupB.slice(0, bTake));
       } else {
         // 'all': 新製品・お知らせ（送信可能な全員）
         picked = base2;
