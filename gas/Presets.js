@@ -27,7 +27,7 @@ const Presets = (() => {
         + '気になるところをタップしていただくと、詳しいご案内が届きます。',
       panels: [
         {
-          imageUrl: 'https://ueno-iin-biyou-miwa.com/wp-content/uploads/2026/09/line-2026-10-panel1_datsumou.jpg',
+          imageUrl: 'https://ueno-iin-biyou-miwa.com/wp-content/uploads/2026/09/line-2026-10-datsumou-v2.jpg',
           keyword: '全身脱毛コースについて',
           replyText: '全身脱毛コースのご案内です。\n\n'
             + '■レディース 5回コース（税込・自由診療）\n'
@@ -36,10 +36,12 @@ const Presets = (() => {
             + '・全身＋顔全体＋VIO 441,100円 →割引 383,240円\n\n'
             + '■メンズ 5回コース（税込・自由診療）\n'
             + '・全身（顔・VIO除く） 386,100円 →割引 336,600円\n\n'
+            + '■通い方は自由に選べます\n'
+            + '一気に全身を1回でも、部位ごとに分けて短い時間で何回も通うのでも大丈夫です。\n'
+            + 'お仕事や学校のご都合に合わせて組み立てますので、ご相談ください。\n\n'
             + '■割引になる時間帯（LINE会員様限定）\n'
             + '金曜 17:00〜20:00 ／ 土曜 12:00〜15:00\n'
-            + '2026年10月からは月曜 17:00〜20:00 も対象です。\n'
-            + '※全身脱毛コースの延長時間帯割引は、10月以降も続きます。\n\n'
+            + '2026年10月からは月曜 17:00〜20:00 も対象です。\n\n'
             + '■リスク・副作用\n'
             + '照射後の赤み、ほてり、毛のう炎が出ることがあります。まれにやけど・色素沈着。\n'
             + '日焼け直後、妊娠中の方は施術できません。\n\n'
@@ -47,13 +49,16 @@ const Presets = (() => {
             + '美容予約専用 026-235-3514（9:30〜17:00）へお願いします。',
         },
         {
-          imageUrl: 'https://ueno-iin-biyou-miwa.com/wp-content/uploads/2026/09/line-2026-10-panel2_milano.jpg',
+          imageUrl: 'https://ueno-iin-biyou-miwa.com/wp-content/uploads/2026/09/line-2026-10-milano-v2.jpg',
           keyword: 'ミラノリピールについて',
           replyText: 'ミラノリピール（バイオリピール）のご案内です。\n\n'
-            + '■料金（税込・自由診療／金曜・土曜のみ）\n'
+            + '■料金（税込・自由診療）\n'
             + '・顔 初回 11,000円\n'
             + '・顔 2回目以降 15,400円\n'
+            + '・顔 5回セット 55,000円\n'
             + '・顔＋首＋デコルテ 3回セット 59,400円\n\n'
+            + '■施術日\n'
+            + '月曜・金曜・土曜のみ（月曜は2026年10月より）\n\n'
             + '■こんな方に\n'
             + '毛穴の開き・黒ずみ、肌のごわつき、ニキビ跡の凹凸、くすみ、\n'
             + '首やデコルテの肌質が気になる方に。\n'
@@ -68,7 +73,7 @@ const Presets = (() => {
             + '美容予約専用 026-235-3514（9:30〜17:00）へお願いします。',
         },
         {
-          imageUrl: 'https://ueno-iin-biyou-miwa.com/wp-content/uploads/2026/09/line-2026-10-panel3_oshirase.jpg',
+          imageUrl: 'https://ueno-iin-biyou-miwa.com/wp-content/uploads/2026/09/line-2026-10-oshirase-v2.jpg',
           keyword: '10月からのお知らせ',
           replyText: '【重要】10月からの変更についてご案内します。\n\n'
             + '① 延長時間帯の割引は2026年9月30日で終了します\n'
