@@ -52,6 +52,14 @@
     ステージは毎回自動判定されます。手動で変更した人には ✋ が付き、（自動）に戻すまで固定されます。</p>
   </div>
 
+  <div class="card" id="presetCard" style="display:none">
+    <label>📦 配信プリセット（用意しておいた配信内容をまとめて読み込む）</label>
+    <select id="presetSel"></select>
+    <button class="mini" onclick="applyPreset()" style="margin-top:8px">この内容を読み込む</button>
+    <p class="note">グループ・本文・3分割の画像／キーワード／自動応答をまとめて入力欄に入れます。読み込んだあとは自由に直せます。<b>読み込むだけでは送信されません。</b></p>
+    <div id="presetMsg"></div>
+  </div>
+
   <div class="card">
     <label>グループを選ぶ</label>
     <select id="group">
@@ -220,6 +228,7 @@
   var stages = ['新規', '反応待ち', '反応あり', '予約済み', '休眠', '対象外'];
   renderBoard(null);  // 初期表示（人数は「-」、リスト更新で埋まる）
   updateImgTap();     // 画像タップ動作の入力欄の初期表示
+  loadPresets();      // 配信プリセットの読み込み（あればカードを表示）
 
   function pin() { return ''; }  // PIN廃止（サーバー側引数の互換用）
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -302,6 +311,42 @@
     document.getElementById('imgKwBox').style.display = (tap === 'keyword') ? '' : 'none';
     document.getElementById('imgAspect').style.display = (tap === 'none') ? 'none' : '';
   }
+  // ---- 配信プリセット ----
+  var presets = [];
+  function loadPresets() {
+    google.script.run
+      .withSuccessHandler(function (list) {
+        presets = list || [];
+        if (!presets.length) return;
+        document.getElementById('presetCard').style.display = '';
+        document.getElementById('presetSel').innerHTML = presets.map(function (p, i) {
+          return '<option value="' + i + '">' + esc(p.name) + '</option>';
+        }).join('');
+      })
+      .withFailureHandler(function () { /* プリセットが無くても本体は使える */ })
+      .lineConsoleGetPresets();
+  }
+  function applyPreset() {
+    var p = presets[Number(document.getElementById('presetSel').value) || 0];
+    if (!p) return;
+    if (p.group) document.getElementById('group').value = p.group;
+    if (p.text != null) document.getElementById('msg').value = p.text;
+    if (p.panels && p.panels.length) {
+      document.getElementById('panelMode').checked = true;
+      updatePanelMode();
+      if (p.aspect) document.getElementById('panelAspect').value = p.aspect;
+      p.panels.forEach(function (panel, i) {
+        var n = i + 1;
+        if (!document.getElementById('pImg' + n)) return;
+        document.getElementById('pImg' + n).value = panel.imageUrl || '';
+        document.getElementById('pKw' + n).value = panel.keyword || '';
+        document.getElementById('pReply' + n).value = panel.replyText || '';
+      });
+    }
+    document.getElementById('presetMsg').innerHTML =
+      '<p class="ok">読み込みました。「① リストを更新して表示」を押して送信先を確認してください。</p>';
+  }
+
   // ---- 3分割リッチメッセージ ----
   function renderPanelRows() {
     var box = document.getElementById('panelRows');
