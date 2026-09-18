@@ -201,3 +201,86 @@ THE MODELのリードステージ管理をクリニック向けに翻案した�
 - GASのWebアプリURLは環境変数ではなく `PropertiesService` で管理する
 - WebアプリはANYONE_ANONYMOUS公開のため、破壊的な操作 (復元など) は必ず
   `BACKUP_ADMIN_TOKEN` の照合を通す
+
+## 表示速度の改善（2026-09-18）
+
+予約表の表示が遅いという指摘を受けて調査・改修した。**データ・シートの内容は一切変更していない。**
+
+### 原因
+
+計測の結果、遅さの本体は「シートを読む時間」ではなく **GASのリクエスト1本あたりの固定コスト** だった。
+
+- 予約0件の日でも応答に **2.3秒** かかる（＝データ量ではなく実行環境の起動コスト）
+- GASは同じ利用者からのリクエストを**順番待ち**で処理する。連続して叩くと急激に悪化し、
+  計測中には同じリクエストが **32秒** までかかった
+- つまり **リクエストの本数を減らすことがほぼ唯一の対策**
+
+`/schedule` を1回開くだけで **10本** 叩いていた。
+
+| 内訳 | 本数 | 理由 |
+|---|---|---|
+| `getScheduleReservations` | 7 | 日付タブの件数バッジが1日1本ずつ取得していた |
+| `getClosures` | 2 | 閉じている `MonthDatePicker` / `AbsenceCalendarModal` が先読みしていた |
+| `getMasters` | 1 | |
+
+### 対応
+
+| 版 | 内容 |
+|---|---|
+| GAS @89 | `getScheduleReservationsRange`（from〜toを1回で返す）を追加／`SheetService` に実行内キャッシュ（スプレッドシート・シート・行データ）／`updateById` を列ごとの `setValue` から1行1回の `setValues` に／`Utilities.formatDate` を値ごとにキャッシュ／履歴は末尾1500行だけ読み、足りない場合のみ全読み |
+| GAS @90 | `getScheduleBootstrap`（マスタ＋期間の予約＋終日不在を1回の実行でまとめて返す）を追加 |
+| 管理画面 | `useScheduleBootstrap` に集約／選択日の予約は週データから切り出す／`QueryClient` の既定で `refetchOnWindowFocus`・`refetchOnReconnect` を無効化／`useClosures` に `enabled` を追加し、閉じているモーダルは取得しない |
+
+### 結果（本番実測）
+
+| | 前 | 後 |
+|---|---|---|
+| 予約表を開く | 10本 | **2本** |
+| タブに戻る | 4本 | **0本** |
+| 日付タブを押す | 1本 | **0本** |
+| 週ぶんの予約取得 | 17.3秒（7本） | **2.5秒（1本）** |
+
+データの同一性は確認済み（108件・日別 15/12/11/12/22/36/0・マスタ 6エリア/4スタッフ/13部屋/4施術・終日不在0・日付と時刻の形式）。
+
+### 残っている改善余地
+
+1. **サイドバーの未確定バッジ**（`PendingBadge`）だけが `getScheduleReservations` を別に叩いている。
+   bootstrap に当日ぶんを載せれば **2本→1本** になる
+2. **予約の保存**が `upsertScheduleReservation` の更新経路でシートを3回読んでいる
+   （競合チェック → `updateById` → `findById` で読み直し）。読み直しを省けば1〜2秒短縮できる
+3. `getMasters` は部屋・スタッフ・施術がほぼ変わらないのに毎回シート4枚を読んでいる。
+   `CacheService` に載せてマスタ更新時だけ破棄すると効く
+
+---
+
+## デプロイ手順（2026-09-18 時点で確認済み）
+
+### 本番のデプロイID
+
+管理画面（Vercel の `VITE_GAS_URL`）が叩いているのは **@87 系列のデプロイID**。
+デプロイ一覧には同じ説明の複数バージョンが並ぶので、**IDで指定しないと本番に反映されない**。
+
+```
+AKfycbzx3Sn-Fmx_PVJHzYARUqyUYOkMNtZf9bimKws4INl-H_0II3BoB1gi7z3xYZHLHoWU
+```
+
+### 手順
+
+```powershell
+cd C:\Users\takur\projects\yoyaku
+clasp push --force
+clasp deploy -i AKfycbzx3Sn-Fmx_PVJHzYARUqyUYOkMNtZf9bimKws4INl-H_0II3BoB1gi7z3xYZHLHoWU -d "変更内容"
+```
+
+- `-i` を省くと**新しいURLのデプロイが増えるだけで本番は変わらない**
+- 戻すときは同じIDに旧バージョンを指定：`clasp deploy -i <ID> -V 89`
+- `clasp push` はスクリプトのソースを差し替えるだけで、`/exec` は再デプロイするまで変わらない。
+  ただし**定期トリガー（バックアップ3〜4時台、LINE集計6時台）は push 直後から新コードで動く**
+- GASを先、管理画面（Vercelへのマージ）を後にする。逆順だと新APIが無い状態で画面が呼び出してしまう
+
+### 開発環境メモ
+
+- Node.js 24 LTS と `@google/clasp` 3.4.1 をこのPCに導入済み（2026-09-18）
+- 管理画面のビルド確認：`cd admin && npm run build`（`tsc -b && vite build`）
+- GASを叩いて動作確認する場合、**連続して叩くと本番の応答が悪化する**。
+  計測は控えめに行い、悪化させた場合は10〜15分置くと戻る
