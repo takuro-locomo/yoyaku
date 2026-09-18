@@ -48,7 +48,8 @@ export default function AbsenceCalendarModal({ open, onClose, machineId, columnN
   const today = new Date().toLocaleDateString('sv');
   const [month, setMonth] = useState(today.substring(0, 7));
 
-  const { data: closures = [], isLoading } = useClosures(month);
+  // 閉じている間は取得しない（開いたときに初めて取りに行く）
+  const { data: closures = [], isLoading } = useClosures(month, open);
   const toggle = useToggleClosure();
   const [error, setError] = useState<string | null>(null);
 

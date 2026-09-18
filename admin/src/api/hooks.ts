@@ -216,14 +216,18 @@ export function useDeleteScheduleReservation() {
 // 終日不在 (列単位の休診日)
 // ---------------------------------------------------------------------------
 
-/** 指定月 (YYYY-MM) の終日不在設定を取得する */
-export function useClosures(month: string) {
+/**
+ * 指定月 (YYYY-MM) の終日不在設定を取得する。
+ * enabled=false の間は取得しない（閉じているモーダルが先読みしないように）。
+ */
+export function useClosures(month: string, enabled = true) {
   return useQuery<Closure[]>({
     queryKey: ['closures', month],
     queryFn:  async () => {
       const data = await gasGet<Closure[]>('getClosures', { month });
       return data.map(c => ({ ...c, date: (c.date ?? '').substring(0, 10) }));
     },
+    enabled: enabled && !!month,
     staleTime: 30 * 1000,
     retry: 1,
   });

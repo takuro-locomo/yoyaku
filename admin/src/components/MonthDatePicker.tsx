@@ -51,7 +51,8 @@ export default function MonthDatePicker({ open, onClose, value, onSelect }: Prop
     if (open) setMonth(value.substring(0, 7));
   }, [open, value]);
 
-  const { data: closures = [] } = useClosures(month);
+  // 閉じている間は取得しない（開いたときに初めて取りに行く）
+  const { data: closures = [] } = useClosures(month, open);
 
   if (!open) return null;
 
