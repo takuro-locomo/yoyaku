@@ -7,7 +7,7 @@ import ConfirmPendingModal from '../components/ConfirmPendingModal';
 import HistoryPanel from '../components/HistoryPanel';
 import AbsenceCalendarModal from '../components/AbsenceCalendarModal';
 import MonthDatePicker from '../components/MonthDatePicker';
-import { useMasters, useScheduleReservations, useScheduleReservationsRange, useUpsertScheduleReservation, useDeleteScheduleReservation, useClosures } from '../api/hooks';
+import { useScheduleBootstrap, useUpsertScheduleReservation, useDeleteScheduleReservation } from '../api/hooks';
 
 type Period = 'morning' | 'afternoon';
 
@@ -116,10 +116,11 @@ export default function Schedule() {
 
   const weekDays = useMemo(() => getWeekDays(date), [date]);
 
-  const { data: masters }              = useMasters();
-  const { data: apiReservations = [] } = useScheduleReservations(date);
-  // 日付タブの件数用。週ぶんを1リクエストでまとめて取る
-  const { data: weekReservations = [] } = useScheduleReservationsRange(weekDays);
+  // マスタ・週ぶんの予約・その月の終日不在を1リクエストでまとめて取得する
+  const { data: bootstrap } = useScheduleBootstrap(weekDays, date.substring(0, 7));
+  const masters           = bootstrap?.masters;
+  const weekReservations  = bootstrap?.reservations ?? [];
+  const monthClosures     = bootstrap?.closures ?? [];
   const weekCounts = useMemo(() => {
     const m: Record<string, number> = {};
     weekReservations.forEach(r => {
@@ -146,13 +147,12 @@ export default function Schedule() {
   const timeSlots     = period === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
 
   const dayReservations = useMemo(
-    () => apiReservations.filter(r => (r.date ?? '').substring(0, 10) === date),
-    [apiReservations, date],
+    () => weekReservations.filter(r => (r.date ?? '').substring(0, 10) === date),
+    [weekReservations, date],
   );
 
   // ── 終日不在（整形診察室の休診日）──
   const ABSENCE_LABEL = '琢郎不在';
-  const { data: monthClosures = [] } = useClosures(date.substring(0, 7));
   const seikeiArea      = machineAreas.find(a => a.name.includes('整形診察'));
   const seikeiMachineId = seikeiArea?.machines[0]?.id ?? 'm-sei';
   const dayClosures = useMemo(

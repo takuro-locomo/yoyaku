@@ -109,6 +109,66 @@ export function useScheduleReservationsRange(dates: string[]) {
   return { data, isLoading: query.isLoading };
 }
 
+// ---------------------------------------------------------------------------
+// 予約表の初期表示（マスタ＋期間の予約＋終日不在を1リクエストで）
+// ---------------------------------------------------------------------------
+
+export interface ScheduleBootstrap {
+  masters:      Masters;
+  reservations: ScheduleReservation[];
+  closures:     Closure[];
+}
+
+/**
+ * 予約表を開いたときに必要なものをまとめて取得する。
+ *
+ * 以前は マスタ / 週の予約 / 選択日の予約 / 終日不在 で4リクエストに分かれていた。
+ * GAS は1リクエストあたり2秒以上の固定コストがかかり、同じ利用者からの
+ * リクエストを順番待ちで処理するため、本数を減らすのが一番効く。
+ * 取得した内容は個別クエリのキャッシュにも配るので、モーダルなど他の場所が
+ * 同じデータを取り直さない。
+ */
+export function useScheduleBootstrap(dates: string[], month: string) {
+  const qc = useQueryClient();
+
+  const sorted = useMemo(() => [...dates].sort(), [dates]);
+  const from = sorted[0] ?? '';
+  const to   = sorted[sorted.length - 1] ?? '';
+
+  const query = useQuery<ScheduleBootstrap>({
+    queryKey: ['scheduleBootstrap', from, to, month],
+    queryFn:  async () => {
+      const d = await gasGet<ScheduleBootstrap>('getScheduleBootstrap', { from, to, month });
+      return {
+        masters:      d.masters,
+        reservations: (d.reservations ?? []).map(normalizeScheduleRow),
+        closures:     (d.closures ?? []).map(c => ({ ...c, date: (c.date ?? '').substring(0, 10) })),
+      };
+    },
+    enabled: !!from && !!month,
+    staleTime: 30 * 1000,
+    retry: 1,
+  });
+
+  // 個別クエリのキャッシュにも配る（未取得のものだけ。楽観的更新は壊さない）
+  const data = query.data;
+  useEffect(() => {
+    if (!data) return;
+    if (qc.getQueryData(['masters']) === undefined) qc.setQueryData(['masters'], data.masters);
+    if (qc.getQueryData(['closures', month]) === undefined) qc.setQueryData(['closures', month], data.closures);
+    const byDate: Record<string, ScheduleReservation[]> = {};
+    sorted.forEach(d => { byDate[d] = []; });
+    data.reservations.forEach(r => { if (byDate[r.date]) byDate[r.date].push(r); });
+    sorted.forEach(d => {
+      if (qc.getQueryData(['scheduleReservations', d]) === undefined) {
+        qc.setQueryData(['scheduleReservations', d], byDate[d]);
+      }
+    });
+  }, [data, sorted, month, qc]);
+
+  return query;
+}
+
 export function useUpsertScheduleReservation() {
   const qc = useQueryClient();
   return useMutation({
@@ -124,8 +184,9 @@ export function useUpsertScheduleReservation() {
             ? old.map(r => r.id === vars.id ? result : r)  // 更新
             : [...old, result],                             // 新規追加
       );
-      // 範囲取得のキャッシュ（日付タブの件数など）も作り直す
+      // まとめ取得のキャッシュ（日付タブの件数など）も作り直す
       qc.invalidateQueries({ queryKey: ['scheduleRange'] });
+      qc.invalidateQueries({ queryKey: ['scheduleBootstrap'] });
       // 追加・変更を履歴パネルに反映
       qc.invalidateQueries({ queryKey: ['scheduleHistory'] });
     },
@@ -142,8 +203,9 @@ export function useDeleteScheduleReservation() {
         ['scheduleReservations', vars.date],
         (old = []) => old.filter(r => r.id !== vars.id),
       );
-      // 範囲取得のキャッシュ（日付タブの件数など）も作り直す
+      // まとめ取得のキャッシュ（日付タブの件数など）も作り直す
       qc.invalidateQueries({ queryKey: ['scheduleRange'] });
+      qc.invalidateQueries({ queryKey: ['scheduleBootstrap'] });
       // 削除を履歴パネルに反映
       qc.invalidateQueries({ queryKey: ['scheduleHistory'] });
     },
@@ -193,6 +255,7 @@ export function useToggleClosure() {
     },
     onSettled: (_res, _err, vars) => {
       qc.invalidateQueries({ queryKey: ['closures', vars.date.substring(0, 7)] });
+      qc.invalidateQueries({ queryKey: ['scheduleBootstrap'] });
     },
   });
 }

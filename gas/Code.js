@@ -148,6 +148,14 @@ function _route(action, params) {
     case 'getScheduleReservationsRange':
       return _buildResponse({ success: true, data: Reservation.getScheduleReservationsRange(params.from, params.to) });
 
+    // 予約表の初期表示に必要なものを1リクエストでまとめて返す
+    case 'getScheduleBootstrap':
+      return _buildResponse({ success: true, data: {
+        masters:      _getMasters(),
+        reservations: Reservation.getScheduleReservationsRange(params.from, params.to),
+        closures:     Reservation.getClosures(params.month, params.machineId),
+      }});
+
     case 'upsertScheduleReservation':
       return _buildResponse({ success: true, data: Reservation.upsertScheduleReservation(params) });
 
