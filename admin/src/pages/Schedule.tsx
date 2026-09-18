@@ -7,7 +7,7 @@ import ConfirmPendingModal from '../components/ConfirmPendingModal';
 import HistoryPanel from '../components/HistoryPanel';
 import AbsenceCalendarModal from '../components/AbsenceCalendarModal';
 import MonthDatePicker from '../components/MonthDatePicker';
-import { useMasters, useScheduleReservations, useUpsertScheduleReservation, useDeleteScheduleReservation, useClosures } from '../api/hooks';
+import { useMasters, useScheduleReservations, useScheduleReservationsRange, useUpsertScheduleReservation, useDeleteScheduleReservation, useClosures } from '../api/hooks';
 
 type Period = 'morning' | 'afternoon';
 
@@ -39,13 +39,10 @@ function shiftMonths(dateStr: string, months: number): string {
 }
 
 function DayTab({
-  day, isSelected, isToday, onClick,
+  day, isSelected, isToday, onClick, count,
 }: {
-  day: string; isSelected: boolean; isToday: boolean; onClick: () => void;
+  day: string; isSelected: boolean; isToday: boolean; onClick: () => void; count: number;
 }) {
-  const { data: rows = [] } = useScheduleReservations(day);
-  const count = rows.filter(r => (r.date ?? '').substring(0, 10) === day).length;
-
   const d   = new Date(day + 'T00:00:00');
   const dow = d.getDay();
   const isSat = dow === 6;
@@ -121,6 +118,16 @@ export default function Schedule() {
 
   const { data: masters }              = useMasters();
   const { data: apiReservations = [] } = useScheduleReservations(date);
+  // 日付タブの件数用。週ぶんを1リクエストでまとめて取る
+  const { data: weekReservations = [] } = useScheduleReservationsRange(weekDays);
+  const weekCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    weekReservations.forEach(r => {
+      const d = (r.date ?? '').substring(0, 10);
+      m[d] = (m[d] ?? 0) + 1;
+    });
+    return m;
+  }, [weekReservations]);
   const upsert = useUpsertScheduleReservation();
   const del    = useDeleteScheduleReservation();
 
@@ -305,7 +312,7 @@ export default function Schedule() {
           {!tabsHidden && (
             <div className="flex gap-1.5 px-2 pb-1 overflow-x-auto">
               {weekDays.map(day => (
-                <DayTab key={day} day={day} isSelected={day === date} isToday={day === today} onClick={() => setDate(day)} />
+                <DayTab key={day} day={day} isSelected={day === date} isToday={day === today} onClick={() => setDate(day)} count={weekCounts[day] ?? 0} />
               ))}
             </div>
           )}
@@ -397,7 +404,7 @@ export default function Schedule() {
             ) : (
               <div className="flex gap-1.5">
                 {weekDays.map(day => (
-                  <DayTab key={day} day={day} isSelected={day === date} isToday={day === today} onClick={() => setDate(day)} />
+                  <DayTab key={day} day={day} isSelected={day === date} isToday={day === today} onClick={() => setDate(day)} count={weekCounts[day] ?? 0} />
                 ))}
               </div>
             )}

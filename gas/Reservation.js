@@ -420,6 +420,8 @@ const Reservation = (() => {
   // ---------------------------------------------------------------------------
 
   const HISTORY_SHEET = 'history';
+  // 履歴取得でまず末尾から読む行数（これを超えて遡る必要がある場合のみ全読み）
+  const HISTORY_TAIL_ROWS = 1500;
   const HISTORY_HEADERS = [
     'id', 'action', 'at', 'reservationId', 'date', 'timeSlot',
     'machineId', 'patientName', 'treatmentId', 'staffId',
@@ -485,10 +487,42 @@ const Reservation = (() => {
     const n = Number(days) || 3;
     SheetService.ensureSheet(HISTORY_SHEET, HISTORY_HEADERS);
     const cutoff = new Date(Date.now() - n * 24 * 60 * 60 * 1000);
-    return SheetService.findWhere(HISTORY_SHEET, function(r) {
+
+    // history は追記のみで増え続けるため、まず末尾だけを読む。
+    // 読んだ範囲の最古の行がまだ cutoff より新しい＝取りこぼしがありうる場合に限り
+    // 全行読みにフォールバックするので、返る結果は全読みと同じになる。
+    var tail = SheetService.findTail(HISTORY_SHEET, HISTORY_TAIL_ROWS);
+    var rows = tail.rows;
+    if (tail.truncated) {
+      var oldest = null;
+      for (var i = 0; i < rows.length; i++) {
+        if (!rows[i].at) continue;
+        var t = new Date(rows[i].at);
+        if (oldest === null || t < oldest) oldest = t;
+      }
+      // 末尾ぶんがすべて cutoff 以降なら、それより古い行にも対象が残っている
+      if (oldest === null || oldest >= cutoff) {
+        rows = SheetService.findAll(HISTORY_SHEET);
+      }
+    }
+
+    return rows.filter(function(r) {
       return r.at && new Date(r.at) >= cutoff;
     }).sort(function(a, b) {
       return new Date(b.at) - new Date(a.at);
+    });
+  }
+
+  /** 予約表の1行を管理画面に返す形（date=YYYY-MM-DD, timeSlot=HH:MM）に整える */
+  function _normalizeScheduleRow(r) {
+    // timeSlot が "1899-12-30T09:00:00+09:00" 形式の場合は "HH:MM" に正規化する
+    var ts = String(r.timeSlot);
+    if (ts.indexOf('T') !== -1) {
+      ts = ts.split('T')[1].slice(0, 5);
+    }
+    return Object.assign({}, r, {
+      date:     String(r.date).substring(0, 10),
+      timeSlot: ts,
     });
   }
 
@@ -501,17 +535,28 @@ const Reservation = (() => {
     return SheetService.findWhere(SCHEDULE_SHEET, function(r) {
       // SheetService が日付を ISO8601 で返す場合も先頭10文字で比較
       return String(r.date).substring(0, 10) === date;
-    }).map(function(r) {
-      // timeSlot が "1899-12-30T09:00:00+09:00" 形式の場合は "HH:MM" に正規化する
-      var ts = String(r.timeSlot);
-      if (ts.indexOf('T') !== -1) {
-        ts = ts.split('T')[1].slice(0, 5);
-      }
-      return Object.assign({}, r, {
-        date:     String(r.date).substring(0, 10),
-        timeSlot: ts,
-      });
-    });
+    }).map(_normalizeScheduleRow);
+  }
+
+  /**
+   * 指定期間 (from〜to・両端を含む) の予約表データをまとめて返す。
+   * 1日ずつ getScheduleReservations を呼ぶとシートの全読みが日数ぶん走るため、
+   * 週表示などで日数ぶんのリクエストをまとめるために使う。
+   * 返す行の形は getScheduleReservations と同一。
+   * @param {string} from - YYYY-MM-DD
+   * @param {string} to   - YYYY-MM-DD (省略時は from と同じ)
+   */
+  function getScheduleReservationsRange(from, to) {
+    if (!from) throw new Error('from (YYYY-MM-DD) は必須です');
+    var start = String(from).substring(0, 10);
+    var end   = String(to || from).substring(0, 10);
+    if (end < start) { var tmp = start; start = end; end = tmp; }
+
+    return SheetService.findWhere(SCHEDULE_SHEET, function(r) {
+      var d = String(r.date).substring(0, 10);
+      // YYYY-MM-DD は辞書順＝日付順なので文字列比較でよい
+      return d >= start && d <= end;
+    }).map(_normalizeScheduleRow);
   }
 
   /**
@@ -630,7 +675,8 @@ const Reservation = (() => {
 
   return {
     create, update, cancel, getById, getByDate, getByPatientId, getAvailableSlots, checkConflicts,
-    getScheduleReservations, upsertScheduleReservation, deleteScheduleReservation,
+    getScheduleReservations, getScheduleReservationsRange,
+    upsertScheduleReservation, deleteScheduleReservation,
     getScheduleHistory, setHistoryChecked,
     getClosures, toggleClosure,
   };

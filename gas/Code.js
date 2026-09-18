@@ -145,6 +145,9 @@ function _route(action, params) {
     case 'getScheduleReservations':
       return _buildResponse({ success: true, data: Reservation.getScheduleReservations(params.date) });
 
+    case 'getScheduleReservationsRange':
+      return _buildResponse({ success: true, data: Reservation.getScheduleReservationsRange(params.from, params.to) });
+
     case 'upsertScheduleReservation':
       return _buildResponse({ success: true, data: Reservation.upsertScheduleReservation(params) });
 

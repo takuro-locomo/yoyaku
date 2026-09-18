@@ -1,4 +1,5 @@
-import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { gasGet, gasPost } from './gasClient';
 import type { MachineArea, ScheduleStaff, ScheduleReservation, Room, Equipment, Service, Patient, Reservation, HistoryEntry, CheckRole, Closure } from '../types';
 
@@ -49,26 +50,63 @@ export function useScheduleReservations(date: string) {
   });
 }
 
-// 日付範囲の全予約を並列フェッチしてまとめて返す
+function normalizeScheduleRow(r: ScheduleReservation): ScheduleReservation {
+  return {
+    ...r,
+    date:     r.date.substring(0, 10),
+    timeSlot: r.timeSlot.includes('T') ? r.timeSlot.split('T')[1].slice(0, 5) : r.timeSlot,
+  };
+}
+
+/**
+ * 日付範囲の予約をまとめて取得する。
+ *
+ * 以前は日付ごとに1リクエスト投げていたため、月表示だと30回前後のリクエストが走り、
+ * そのたびにGAS側で予約表シートを全件読み直していた。
+ * 最初と最後の日付で1回だけ取得し、必要な日付ぶんに絞って返す。
+ * 取得できた日付は日別キャッシュにも入れるので、同じ日を個別に取り直さない。
+ */
 export function useScheduleReservationsRange(dates: string[]) {
-  const results = useQueries({
-    queries: dates.map(date => ({
-      queryKey: ['scheduleReservations', date],
-      queryFn: async () => {
-        const data = await gasGet<ScheduleReservation[]>('getScheduleReservations', { date });
-        return data.map(r => ({
-          ...r,
-          date:     r.date.substring(0, 10),
-          timeSlot: r.timeSlot.includes('T') ? r.timeSlot.split('T')[1].slice(0, 5) : r.timeSlot,
-        }));
-      },
-      staleTime: 30 * 1000,
-      retry: 1,
-    })),
+  const qc = useQueryClient();
+
+  const sorted = useMemo(() => [...dates].sort(), [dates]);
+  const from = sorted[0] ?? '';
+  const to   = sorted[sorted.length - 1] ?? '';
+
+  const query = useQuery<ScheduleReservation[]>({
+    queryKey: ['scheduleRange', from, to],
+    queryFn:  async () => {
+      const data = await gasGet<ScheduleReservation[]>('getScheduleReservationsRange', { from, to });
+      return data.map(normalizeScheduleRow);
+    },
+    enabled: !!from,
+    staleTime: 30 * 1000,
+    retry: 1,
   });
-  const data    = results.flatMap(r => r.data ?? []);
-  const isLoading = results.some(r => r.isLoading);
-  return { data, isLoading };
+
+  // 日別キャッシュが空の日だけ埋める（楽観的更新済みのキャッシュは上書きしない）
+  const rows = query.data;
+  useEffect(() => {
+    if (!rows) return;
+    const byDate: Record<string, ScheduleReservation[]> = {};
+    sorted.forEach(d => { byDate[d] = []; });
+    rows.forEach(r => {
+      if (byDate[r.date]) byDate[r.date].push(r);
+    });
+    sorted.forEach(d => {
+      if (qc.getQueryData(['scheduleReservations', d]) === undefined) {
+        qc.setQueryData(['scheduleReservations', d], byDate[d]);
+      }
+    });
+  }, [rows, sorted, qc]);
+
+  const wanted = useMemo(() => new Set(sorted), [sorted]);
+  const data = useMemo(
+    () => (rows ?? []).filter(r => wanted.has(r.date)),
+    [rows, wanted],
+  );
+
+  return { data, isLoading: query.isLoading };
 }
 
 export function useUpsertScheduleReservation() {
@@ -86,6 +124,8 @@ export function useUpsertScheduleReservation() {
             ? old.map(r => r.id === vars.id ? result : r)  // 更新
             : [...old, result],                             // 新規追加
       );
+      // 範囲取得のキャッシュ（日付タブの件数など）も作り直す
+      qc.invalidateQueries({ queryKey: ['scheduleRange'] });
       // 追加・変更を履歴パネルに反映
       qc.invalidateQueries({ queryKey: ['scheduleHistory'] });
     },
@@ -102,6 +142,8 @@ export function useDeleteScheduleReservation() {
         ['scheduleReservations', vars.date],
         (old = []) => old.filter(r => r.id !== vars.id),
       );
+      // 範囲取得のキャッシュ（日付タブの件数など）も作り直す
+      qc.invalidateQueries({ queryKey: ['scheduleRange'] });
       // 削除を履歴パネルに反映
       qc.invalidateQueries({ queryKey: ['scheduleHistory'] });
     },
